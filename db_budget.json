@@ -1,0 +1,29 @@
+[
+  {
+    "budget_id": 101,
+    "user_id": 1,
+    "nama": "Budi",
+    "periode_bulan": "2026-04",
+    "budget_awal": 500000,
+    "sisa_saldo": 500000,
+    "status": "Aman"
+  },
+  {
+    "budget_id": 102,
+    "user_id": 2,
+    "nama": "Siti",
+    "periode_bulan": "2026-04",
+    "budget_awal": 1500000,
+    "sisa_saldo": 850000,
+    "status": "Aman"
+  },
+  {
+    "budget_id": 103,
+    "user_id": 3,
+    "nama": "Agus",
+    "periode_bulan": "2026-04",
+    "budget_awal": 600000,
+    "sisa_saldo": 45000,
+    "status": "Kritis"
+  }
+]

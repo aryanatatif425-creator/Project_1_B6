@@ -4,9 +4,9 @@ import logging
 
 # ─── Import modul tim ─────────────────────────────────────────────
 try:
-    import gui_v2          # GUI utama (buatan Arya)
-    import data_manager    # Pengelola data (buatan Alpedro)
-    import engine           # Mesin logika (buatan Zehan)
+    import gui_v2          # GUI utama 
+    import data_manager    # Pengelola data 
+    import engine           # Mesin logika 
 except ImportError as e:
     print(f"Modul belum tersedia: {e}")
     print("Aplikasi akan berjalan dengan data dummy.")

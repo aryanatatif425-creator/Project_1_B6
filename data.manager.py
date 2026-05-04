@@ -21,3 +21,13 @@ def read_local_data():
             return data
     except json.JSONDecodeError:
         return []
+
+# =========================
+# WRITE LOCAL JSON
+# =========================
+def write_local_data(data):
+    """Menulis data ke file data_promo.json"""
+    with open(FILE_PATH, "w") as file:
+        json.dump(data, file, indent=4)
+
+

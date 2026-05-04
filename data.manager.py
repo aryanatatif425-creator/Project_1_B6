@@ -69,24 +69,3 @@ def push_promo_to_cloud(data):
 
     # Simulasi sukses
     return True
-
-
-# =========================
-# TEST FUNCTION (OPSIONAL)
-# =========================
-if __name__ == "__main__":
-    # Test baca lokal
-    local_data = read_local_data()
-    print("Data lokal:", local_data)
-
-    # Test tulis lokal
-    write_local_data([
-        {"id": 1, "nama": "Promo Baru", "aktif": True}
-    ])
-
-    # Test fetch cloud
-    cloud_data = fetch_cloud_data()
-    print("Data cloud:", cloud_data)
-
-    # Test push cloud
-    push_promo_to_cloud(cloud_data)

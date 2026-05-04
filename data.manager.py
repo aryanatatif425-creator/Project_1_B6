@@ -28,7 +28,13 @@ def read_local_data():
 def write_local_data(data):
     """Menulis data ke file data_promo.json"""
     with open(FILE_PATH, "w") as file:
-        json.dump(data, file, indent=4)
+        json.dump(data, file, indent=2)
+
+# =========================
+# GENERATE ID
+# =========================
+def generate_id(retailer_brand, branch_name, item_name):
+    return f"{retailer_brand.lower()}|{branch_name.lower().replace(' ', '_')}|{item_name.lower().replace(' ', '_')}"
 
 
 # =========================
@@ -65,3 +71,22 @@ def push_promo_to_cloud(data):
     return True
 
 
+# =========================
+# TEST FUNCTION (OPSIONAL)
+# =========================
+if __name__ == "__main__":
+    # Test baca lokal
+    local_data = read_local_data()
+    print("Data lokal:", local_data)
+
+    # Test tulis lokal
+    write_local_data([
+        {"id": 1, "nama": "Promo Baru", "aktif": True}
+    ])
+
+    # Test fetch cloud
+    cloud_data = fetch_cloud_data()
+    print("Data cloud:", cloud_data)
+
+    # Test push cloud
+    push_promo_to_cloud(cloud_data)

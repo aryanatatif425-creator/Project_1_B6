@@ -31,3 +31,22 @@ def write_local_data(data):
         json.dump(data, file, indent=4)
 
 
+# =========================
+# FETCH DATA FROM CLOUD (DUMMY)
+# =========================
+def fetch_cloud_data():
+    """
+    Ambil data dari Google Sheet (sementara dummy)
+    Nanti bisa diganti pakai API / requests
+    """
+    print("Mengambil data dari cloud...")
+
+    # Dummy data
+    dummy_data = [
+        {"id": 1, "nama": "Promo Diskon 10%", "aktif": True},
+        {"id": 2, "nama": "Promo Gratis Ongkir", "aktif": False}
+    ]
+
+    return dummy_data
+
+

@@ -70,7 +70,7 @@ def sort_by_price(records: list[dict]) -> list[dict]:
     Sort by price_int ascending menggunakan Timsort bawaan Python (C-optimized).
     """
     # Menggunakan sorted() bawaan Python dengan key untuk mengambil price_int.
-    # Default get("price_int", 0) digunakan agar aman jika ada data yang tidak memiliki key tersebut.
+    # Default get("price_int", 0) agar aman, kalau ada data yang tidak memiliki key tersebut.
     return sorted(records, key=lambda r: r.get("price_int", 0))
 
 

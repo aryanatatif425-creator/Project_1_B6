@@ -50,3 +50,18 @@ def fetch_cloud_data():
     return dummy_data
 
 
+# =========================
+# PUSH DATA TO CLOUD (DUMMY)
+# =========================
+def push_promo_to_cloud(data):
+    """
+    Kirim data ke Google Sheet (sementara dummy)
+    """
+    print("Mengirim data ke cloud...")
+    print("Data yang dikirim:")
+    print(data)
+
+    # Simulasi sukses
+    return True
+
+

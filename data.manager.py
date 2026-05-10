@@ -75,26 +75,27 @@ def add_promo(item_name, retailer_brand, branch_name, category, area_tags, price
 
     print("✅ Promo berhasil ditambahkan!")
 
-    
+
 
 # =========================
-# FETCH DATA FROM CLOUD (DUMMY)
+# FETCH FROM GOOGLE SHEET
 # =========================
 def fetch_cloud_data():
-    """
-    Ambil data dari Google Sheet (sementara dummy)
-    Nanti bisa diganti pakai API / requests
-    """
-    print("Mengambil data dari cloud...")
+    try:
+        response = requests.get(API_URL, params={
+            "sheet": "Promo",
+            "api_key": API_KEY
+        })
 
-    # Dummy data
-    dummy_data = [
-        {"id": 1, "nama": "Promo Diskon 10%", "aktif": True},
-        {"id": 2, "nama": "Promo Gratis Ongkir", "aktif": False}
-    ]
+        response.raise_for_status()
+        data = response.json()
 
-    return dummy_data
+        print(f"☁️ Fetch sukses: {len(data)} data")
+        return data
 
+    except Exception as e:
+        print("❌ Gagal fetch:", e)
+        return []
 
 # =========================
 # PUSH DATA TO CLOUD (DUMMY)

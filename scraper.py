@@ -77,9 +77,11 @@ class NewsScraper:
 
             products.append({
                 "nama": name,
-                "harga": price,
+                "harga_promo": price,
+                "harga_normal":harga_normal,
+                "periode_promo": periode_promo,
+                "jenis_harga": jenis_harga,
                 "gambar": img,
-                "promo": "Belum tersedia"
             })
 
             if len(products) >= limit:
@@ -100,6 +102,12 @@ if __name__ == "__main__":
 
     print("\nHASIL SCRAPING:\n")
     for p in data:
-        print(p)
+        print("Nama:", p["nama"])
+        print("Harga Promo:", p["harga_promo"])
+        print("Harga Normal:", p["harga_normal"])
+        print("Periode Promo:", p["periode_promo"])
+        print("Jenis Harga:", p["jenis_harga"])
+        print("Gambar:", p["gambar"])
+        print("-" * 50)
 
     scraper.stop_driver()

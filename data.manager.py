@@ -1,12 +1,16 @@
 import json
 import os
 from datetime import datetime
+import requests
 
 # =========================
 # KONFIGURASI FILE
 # =========================
 FILE_PATH = "data_promo.json"
 
+# 🔗 API CONFIG
+API_URL = "https://script.google.com/macros/s/AKfycbwT2neKsWqdP09WgyOBotVXtw5K45qWa3fFj7zQ57EwsQB4HTG8htXKhPbI1ROwKiDB/exec"
+API_KEY = "4dfa489bff8831a80b449061b8247204"
 
 # =========================
 # READ LOCAL JSON

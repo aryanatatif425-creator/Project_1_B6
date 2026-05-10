@@ -98,15 +98,22 @@ def fetch_cloud_data():
         return []
 
 # =========================
-# PUSH DATA TO CLOUD (DUMMY)
+# PUSH TO GOOGLE SHEET
 # =========================
 def push_promo_to_cloud(data):
-    """
-    Kirim data ke Google Sheet (sementara dummy)
-    """
-    print("Mengirim data ke cloud...")
-    print("Data yang dikirim:")
-    print(data)
+    try:
+        response = requests.post(API_URL, json={
+            "api_key": API_KEY,
+            "sheet": "Promo",
+            "data": data
+        })
 
-    # Simulasi sukses
-    return True
+        response.raise_for_status()
+
+        print("☁️ Push sukses!")
+        return True
+
+    except Exception as e:
+        print("❌ Gagal push:", e)
+        return False
+

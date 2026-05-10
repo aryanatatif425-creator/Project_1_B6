@@ -43,6 +43,41 @@ def generate_id(retailer_brand, branch_name, item_name):
 
 
 # =========================
+# ADD PROMO
+# =========================
+def add_promo(item_name, retailer_brand, branch_name, category, area_tags, price_int):
+    data = read_local_data()
+
+    new_id = generate_id(retailer_brand, branch_name, item_name)
+
+    for promo in data:
+        if promo["id"] == new_id:
+            print("❌ Promo sudah ada!")
+            return
+
+    new_promo = {
+        "id": new_id,
+        "timestamp": datetime.now().isoformat(),
+        "item_name": item_name,
+        "retailer_brand": retailer_brand,
+        "branch_name": branch_name,
+        "category": category,
+        "area_tags": area_tags,
+        "price_int": price_int,
+        "price_display": f"Rp {price_int:,}".replace(",", "."),
+        "image_url": "https://placehold.co/200x200?text=Promo",
+        "logo_url": "",
+        "search_vector": f"{item_name} {retailer_brand} {branch_name}".lower()
+    }
+
+    data.append(new_promo)
+    write_local_data(data)
+
+    print("✅ Promo berhasil ditambahkan!")
+
+    
+
+# =========================
 # FETCH DATA FROM CLOUD (DUMMY)
 # =========================
 def fetch_cloud_data():

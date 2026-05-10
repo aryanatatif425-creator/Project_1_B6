@@ -117,3 +117,19 @@ def push_promo_to_cloud(data):
         print("❌ Gagal push:", e)
         return False
 
+# =========================
+# SYNC LOCAL → CLOUD
+# =========================
+def sync_to_cloud():
+    data = read_local_data()
+    return push_promo_to_cloud(data)
+
+
+# =========================
+# SYNC CLOUD → LOCAL
+# =========================
+def sync_from_cloud():
+    data = fetch_cloud_data()
+    if data:
+        write_local_data(data)
+        print("✅ Local updated dari cloud")

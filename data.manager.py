@@ -9,7 +9,7 @@ import requests
 FILE_PATH = "data_promo.json"
 
 # 🔗 API CONFIG
-API_URL = "https://script.google.com/macros/s/AKfycbwT2neKsWqdP09WgyOBotVXtw5K45qWa3fFj7zQ57EwsQB4HTG8htXKhPbI1ROwKiDB/exec"
+API_URL = "https://script.google.com/macros/s/AKfycbyYXsTk2KoKliez2uFMdOfMC5Lc3jbyWYb2lt_1M5AX9jS1NYcoZvHb0JxAngD2jIkTkA/exec?sheet=Promo"
 API_KEY = "4dfa489bff8831a80b449061b8247204"
 
 # =========================
@@ -130,6 +130,24 @@ def sync_to_cloud():
 # =========================
 def sync_from_cloud():
     data = fetch_cloud_data()
-    if data:
-        write_local_data(data)
-        print("✅ Local updated dari cloud")
+
+    if not data:
+        print("❌ Cloud kosong, batal overwrite local")
+        return
+
+    write_local_data(data)
+    print("✅ Local updated dari cloud")
+
+# =========================
+# Test funssi
+# =========================
+if __name__ == "__main__":
+    print(" Memulai proses upload data ke Spreadsheet...")
+    
+    # Memanggil fungsi sync_to_cloud yang sudah ada di file kamu
+    success = sync_to_cloud()
+    
+    if success:
+        print("✅ Semua data lokal berhasil muncul di Spreadsheet!")
+    else:
+        print("❌ Gagal mengirim data. Cek koneksi atau URL API kamu.")

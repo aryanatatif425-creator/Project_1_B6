@@ -45,11 +45,25 @@ def generate_id(retailer_brand, branch_name, item_name):
 # =========================
 # ADD PROMO
 # =========================
-def add_promo(item_name, retailer_brand, branch_name, category, area_tags, price_int):
+def add_promo(
+    item_name,
+    retailer_brand,
+    branch_name,
+    category,
+    area_tags,
+    price_int,
+
+    harga_promo,
+    diskon_persen,
+    perubahan_harga,
+    jenis_harga,
+    periode_promo
+):
     data = read_local_data()
 
     new_id = generate_id(retailer_brand, branch_name, item_name)
 
+    # cek duplikat
     for promo in data:
         if promo["id"] == new_id:
             print("❌ Promo sudah ada!")
@@ -57,14 +71,19 @@ def add_promo(item_name, retailer_brand, branch_name, category, area_tags, price
 
     new_promo = {
         "id": new_id,
-        "timestamp": datetime.now().isoformat(),
-        "item_name": item_name,
-        "retailer_brand": retailer_brand,
-        "branch_name": branch_name,
-        "category": category,
+        "timestamp_scrape": datetime.now().isoformat(),
+        "nama_produk": item_name,
+        "brand_toko": retailer_brand,
+        "nama_cabang": branch_name,
+        "kategori": category,
         "area_tags": area_tags,
-        "price_int": price_int,
-        "price_display": f"Rp {price_int:,}".replace(",", "."),
+        "harga_normal": price_int,
+        "harga_promo": harga_promo,
+        "diskon_persen": diskon_persen,
+        "perubahan_harga": perubahan_harga,
+        "jenis_harga": jenis_harga,
+        "periode_promo": periode_promo,
+        "display_harga": f"Rp {harga_promo:,}".replace(",", "."),
         "image_url": "https://placehold.co/200x200?text=Promo",
         "logo_url": "",
         "search_vector": f"{item_name} {retailer_brand} {branch_name}".lower()
@@ -74,9 +93,6 @@ def add_promo(item_name, retailer_brand, branch_name, category, area_tags, price
     write_local_data(data)
 
     print("✅ Promo berhasil ditambahkan!")
-
-
-
 # =========================
 # FETCH FROM GOOGLE SHEET
 # =========================

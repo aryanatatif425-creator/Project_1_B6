@@ -1,5 +1,7 @@
-import tkinter as tk
-from tkinter import messagebox, simpledialog
+import sys
+import json
+import os
+from PyQt6.QtWidgets import QApplication, QMessageBox, QInputDialog, QWidget, QVBoxLayout, QLabel, QLineEdit
 import logging
 
 # ─── Import modul tim ─────────────────────────────────────────────
@@ -19,27 +21,11 @@ log = logging.getLogger(__name__)
 # ─── Password Admin ──────────────────────────────────────────────
 ADMIN_PASSWORD = "adminpolban"
 
-# ─── Data Dummy (sementara sebelum modul siap) ───────────────────
-DUMMY_DATA = [
-    {
-        "id": "superindo|superindo_pasteur|beras_365_5kg",
-        "nama_produk": "Beras 365 Pulen Wangi 5kg",
-        "brand_toko": "Superindo",
-        "nama_cabang": "Superindo Pasteur",
-        "kategori": "Sembako",
-        "harga_promo": 72900,
-        "harga_normal": 85000,
-        "jenis_harga": "PROMO",
-        "display_harga": "Rp 72.900",
-        "image_url": "",
-        "logo_url": "",
-        "area_tags": ["Sarijadi", "Gegerkalong"],
-        "search_vector": "beras 365 pulen wangi 5kg superindo superindo pasteur"
-    }
-]
+# ─── Path database utama ──────────────────────────────────────────
+DB_PATH = os.path.join(os.path.dirname(__file__), "..", "data_promo.json")
 
 def load_initial_data():
-    """Memuat data awal (database lokal atau dummy)."""
+    """Memuat data awal dari data_manager atau langsung dari data_promo.json."""
     if data_manager:
         try:
             db = data_manager.load_database()
@@ -47,21 +33,30 @@ def load_initial_data():
                 return db
         except Exception as e:
             log.warning(f"Gagal muat data_manager: {e}")
-    return DUMMY_DATA
+
+    # Fallback: baca langsung dari data_promo.json
+    try:
+        with open(DB_PATH, "r", encoding="utf-8") as f:
+            db = json.load(f)
+        log.info(f"Data dimuat dari data_promo.json ({len(db)} item)")
+        return db
+    except Exception as e:
+        log.error(f"Gagal membaca data_promo.json: {e}")
+        return []
 
 def show_admin_login(parent):
     """Menampilkan dialog login admin. Dipanggil dari tombol di Settings."""
-    password = simpledialog.askstring(
+    password, ok = QInputDialog.getText(
+        parent,
         "Login Admin",
         "Masukkan kata sandi Admin:",
-        parent=parent,
-        show="*"
+        QLineEdit.EchoMode.Password
     )
-    if password == ADMIN_PASSWORD:
-        messagebox.showinfo("Berhasil", "Login sebagai Admin berhasil.")
+    if ok and password == ADMIN_PASSWORD:
+        QMessageBox.information(parent, "Berhasil", "Login sebagai Admin berhasil.")
         open_admin_dashboard(parent)
-    elif password is not None:
-        messagebox.showerror("Gagal", "Kata sandi salah.")
+    elif ok:
+        QMessageBox.warning(parent, "Gagal", "Kata sandi salah.")
 
 def open_admin_dashboard(parent):
     """Membuka Dashboard Admin (jendela terpisah atau mengganti UI)."""
@@ -69,7 +64,8 @@ def open_admin_dashboard(parent):
         import admin_tool
         admin_tool.run_dashboard(parent)
     except ImportError:
-        messagebox.showinfo(
+        QMessageBox.information(
+            parent,
             "Admin Tool",
             "Modul admin_tool belum tersedia.\n"
             "Ini akan menjadi Dashboard Admin."
@@ -77,28 +73,32 @@ def open_admin_dashboard(parent):
 
 def main():
     """Entry point aplikasi."""
-    root = tk.Tk()
-    root.withdraw()  # Sembunyikan sampai siap
+    app = QApplication(sys.argv)
 
     # Muat data
     db = load_initial_data()
 
     # Langsung buat GUI Mode Pengguna
     if gui_v2:
-        app = gui_v2.RadarPromoAppV2(
-            root=root,
+        window = gui_v2.RadarPromoAppV2(
             db=db,
             on_search=None,  # Nanti diisi oleh engine
             on_sync=None     # Tidak dipakai di Mode Pengguna
         )
         # Beri referensi fungsi login admin ke GUI
-        app.set_admin_login_callback(lambda parent=root: show_admin_login(parent))
+        window.set_admin_login_callback(lambda parent=window: show_admin_login(parent))
+        window.show()
     else:
-        # Fallback: GUI minimal jika modul belum ada
-        tk.Label(root, text="GUI belum tersedia.\nMode teks.").pack()
+        # Fallback: Dummy Window jika gui_v2 belum ada
+        window = QWidget()
+        window.setWindowTitle("Menunggu gui_v2.py...")
+        window.resize(400, 200)
+        layout = QVBoxLayout()
+        layout.addWidget(QLabel("GUI belum tersedia.\nSedang menunggu file gui_v2.py..."))
+        window.setLayout(layout)
+        window.show()
 
-    root.deiconify()
-    root.mainloop()
+    sys.exit(app.exec())
 
 if __name__ == "__main__":
     main()

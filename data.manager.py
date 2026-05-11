@@ -137,17 +137,3 @@ def sync_from_cloud():
 
     write_local_data(data)
     print("✅ Local updated dari cloud")
-
-# =========================
-# Test funssi
-# =========================
-if __name__ == "__main__":
-    print(" Memulai proses upload data ke Spreadsheet...")
-    
-    # Memanggil fungsi sync_to_cloud yang sudah ada di file kamu
-    success = sync_to_cloud()
-    
-    if success:
-        print("✅ Semua data lokal berhasil muncul di Spreadsheet!")
-    else:
-        print("❌ Gagal mengirim data. Cek koneksi atau URL API kamu.")

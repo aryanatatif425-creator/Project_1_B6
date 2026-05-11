@@ -2,29 +2,29 @@
 engine.py — Radar Promo Algorithm Engine
 =========================================
 Implements the core data-processing pipeline:
-  Geofencing Filter  — keep items whose area_tags include the chosen area
-  Smart Search       — case-insensitive keyword match (Eagerly Loaded)
-  Optimised Sort     — Timsort (Python built-in) on price_int (ascending)
+  1. Filter: Area, Kategori, Toko, Jenis Harga
+  2. Smart Search: Teks cepat (search_vector)
+  3. Optimised Sort: Timsort bawaan Python
+  4. Statistik: Top 3 Toko, Komposisi Kategori
+  5. Perubahan Harga: Kalkulasi selisih harga
+  6. Validasi: Memastikan kelayakan data
 """
 
 import logging
-from typing import Optional
+from typing import Optional, Tuple
+from collections import Counter  # Modul bawaan Python untuk menghitung jumlah data dengan cepat
 
 log = logging.getLogger(__name__)
 
 
-# ─── Geofencing Filter ────────────────────────────────────────────────
+# ─── 1. Fungsi Filter (Area, Kategori, Toko, Jenis Harga) ─────────────
 
 def filter_by_area(records: list[dict], area: Optional[str]) -> list[dict]:
     if not area or area.strip().lower() in ("", "semua area", "all"):
         return list(records)
 
     area_normalised = area.strip()
-    filtered = [
-        r for r in records
-        if area_normalised in r.get("area_tags", [])
-    ]
-    return filtered
+    return [r for r in records if area_normalised in r.get("area_tags", [])]
 
 
 def filter_by_category(records: list[dict], category: Optional[str]) -> list[dict]:
@@ -32,20 +32,32 @@ def filter_by_category(records: list[dict], category: Optional[str]) -> list[dic
         return list(records)
 
     cat_normalised = category.strip()
-    filtered = [
-        r for r in records
-        if r.get("category") == cat_normalised
-    ]
-    return filtered
+    return [r for r in records if r.get("category") == cat_normalised]
 
 
-# ─── Smart Search (Super Cepat berkat Eager Loading) ─────────────────
+def filter_by_shop(records: list[dict], shop: Optional[str]) -> list[dict]:
+    """Menyaring data berdasarkan nama toko."""
+    if not shop or shop.strip() in ("", "Semua Toko"):
+        return list(records)
+    
+    shop_normalised = shop.strip().lower()
+    # Membandingkan nama toko dengan mengabaikan huruf besar/kecil
+    return [r for r in records if r.get("shop_name", "").lower() == shop_normalised]
+
+
+def filter_by_price_type(records: list[dict], price_type: Optional[str]) -> list[dict]:
+    """Menyaring data berdasarkan jenis harga (misal: Diskon, Flash Sale, Reguler)."""
+    if not price_type or price_type.strip() in ("", "Semua Jenis"):
+        return list(records)
+    
+    pt_normalised = price_type.strip().lower()
+    return [r for r in records if r.get("price_type", "").lower() == pt_normalised]
+
+
+# ─── 2. Smart Search (Eager Loading) ──────────────────────────────────
 
 def search_by_keyword(records: list[dict], keyword: Optional[str]) -> list[dict]:
-    """
-    Pencarian super kilat karena data teks sudah dirakit di data_manager.py.
-    Hanya perlu operasi pengecekan substring sederhana.
-    """
+    """Pencarian substring super kilat menggunakan search_vector."""
     if not keyword or not keyword.strip():
         return list(records)
 
@@ -53,44 +65,113 @@ def search_by_keyword(records: list[dict], keyword: Optional[str]) -> list[dict]
     matched = []
 
     for r in records:
-        # Ambil teks rakitan yang sudah disiapkan sejak awal
         haystack = r.get("search_vector", "")
-        
-        # AND logic: pastikan semua kata yang diketik ada di dalam haystack
+        # AND logic: semua kata kunci harus ada di dalam haystack
         if all(tok in haystack for tok in tokens):
             matched.append(r)
 
     return matched
 
 
-# ─── Optimised Sort     — Timsort (Python built-in) on price_int (ascending) ──────────────────────────
+# ─── 3. Optimised Sort (Timsort) ──────────────────────────────────────
 
 def sort_by_price(records: list[dict]) -> list[dict]:
-    """
-    Sort by price_int ascending menggunakan Timsort bawaan Python (C-optimized).
-    """
-    # Menggunakan sorted() bawaan Python dengan key untuk mengambil price_int.
-    # Default get("price_int", 0) agar aman, kalau ada data yang tidak memiliki key tersebut.
+    """Mengurutkan harga dari yang termurah."""
     return sorted(records, key=lambda r: r.get("price_int", 0))
 
 
-# ─── Public Pipeline Entry Point ─────────────────────────────────────────────
+# ─── 4. Fungsi Statistik ──────────────────────────────────────────────
+
+def get_statistics(records: list[dict]) -> dict:
+    """Menghasilkan Top 3 Toko dan Komposisi Kategori dari data yang sedang ditampilkan."""
+    if not records:
+        return {"top_3_toko": [], "komposisi_kategori": {}}
+
+    # Mengambil semua nama kategori dan toko dari data
+    categories = [r.get("category", "Lainnya") for r in records]
+    shops = [r.get("shop_name", "Toko Anonim") for r in records]
+
+    # Menghitung komposisi kategori (misal: {'Makanan': 5, 'Elektronik': 2})
+    komposisi_kategori = dict(Counter(categories))
+    
+    # Menghitung toko paling sering muncul, ambil 3 teratas
+    # Outputnya berupa list of tuples: [('Toko A', 10), ('Toko B', 5), ('Toko C', 2)]
+    top_3_toko = Counter(shops).most_common(3)
+
+    return {
+        "top_3_toko": top_3_toko,
+        "komposisi_kategori": komposisi_kategori
+    }
+
+
+# ─── 5. Fungsi Perubahan Harga ────────────────────────────────────────
+
+def apply_price_changes(records: list[dict]) -> list[dict]:
+    """Menghitung selisih harga jika ada data harga coret (old_price)."""
+    for r in records:
+        old_price = r.get("old_price", 0)
+        current_price = r.get("price_int", 0)
+        
+        # Jika ada harga lama dan lebih mahal dari harga sekarang, hitung potongannya
+        if old_price > current_price:
+            r["price_drop_amount"] = old_price - current_price
+        else:
+            r["price_drop_amount"] = 0
+            
+    return records
+
+
+# ─── 6. Validasi Data Rekomendasi ─────────────────────────────────────
+
+def validate_recommendations(records: list[dict]) -> list[dict]:
+    """Membuang data yang cacat (misalnya tidak ada harga atau tidak ada nama)."""
+    valid_records = []
+    for r in records:
+        # Cek apakah data memiliki price_int (angka) dan judul produk tidak kosong
+        if r.get("price_int") is not None and r.get("product_name"):
+            valid_records.append(r)
+    return valid_records
+
+
+# ─── Public Pipeline Entry Point ──────────────────────────────────────
 
 def run_pipeline(
-    records:  list[dict],
-    area:     Optional[str] = None,
+    records: list[dict],
+    area: Optional[str] = None,
     category: Optional[str] = None,
-    keyword:  Optional[str] = None,
-) -> list[dict]:
+    shop: Optional[str] = None,
+    price_type: Optional[str] = None,
+    keyword: Optional[str] = None,
+) -> Tuple[list[dict], dict]:
+    """
+    Menjalankan seluruh alur pemrosesan data dan mengembalikan 2 hal:
+    1. Daftar rekomendasi promo yang sudah disaring & diurutkan.
+    2. Data statistik (untuk ditampilkan di dashboard/grafik).
+    """
     
     if not records:
-        return []
+        return [], {"top_3_toko": [], "komposisi_kategori": {}}
 
-    step1a = filter_by_area(records, area)
-    step1b = filter_by_category(step1a, category)
-    step2  = search_by_keyword(step1b, keyword)
+    # Tahap 1: Filtering berlapis
+    step1 = filter_by_area(records, area)
+    step2 = filter_by_category(step1, category)
+    step3 = filter_by_shop(step2, shop)
+    step4 = filter_by_price_type(step3, price_type)
     
-    # Memanggil fungsi Timsort
-    step3  = sort_by_price(step2)
+    # Tahap 2: Pencarian teks cepat
+    step5 = search_by_keyword(step4, keyword)
+    
+    # Tahap 3: Validasi kelayakan data
+    step6 = validate_recommendations(step5)
+    
+    # Tahap 4: Kalkulasi perubahan harga (diskon)
+    step7 = apply_price_changes(step6)
+    
+    # Tahap 5: Pengurutan menggunakan Timsort
+    final_records = sort_by_price(step7)
 
-    return step3
+    # Tahap 6: Generate Statistik berdasarkan hasil akhir
+    stats = get_statistics(final_records)
+
+    # Mengembalikan 2 nilai (Tuple): Data hasil saringan dan Data statistiknya
+    return final_records, stats

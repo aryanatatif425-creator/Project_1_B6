@@ -75,6 +75,10 @@ class NewsScraper:
             except:
                 img = "Tidak ditemukan"
 
+            harga_normal = "Belum tersedia"
+            periode_promo = "Belum tersedia"
+            jenis_harga = "Belum tersedia"
+            
             products.append({
                 "nama": name,
                 "harga_promo": price,

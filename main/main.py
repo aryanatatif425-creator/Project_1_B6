@@ -6,13 +6,13 @@ import logging
 
 # ─── Import modul tim ─────────────────────────────────────────────
 try:
-    import gui_v2          # GUI utama 
+    import gui_pyqt          # GUI utama 
     import data_manager    # Pengelola data 
     import engine           # Mesin logika 
 except ImportError as e:
     print(f"Modul belum tersedia: {e}")
     print("Aplikasi akan berjalan dengan data dummy.")
-    gui_v2 = None
+    gui_pyqt = None
     data_manager = None
     engine = None
 
@@ -79,8 +79,8 @@ def main():
     db = load_initial_data()
 
     # Langsung buat GUI Mode Pengguna
-    if gui_v2:
-        window = gui_v2.RadarPromoAppV2(
+    if gui_pyqt:
+        window = gui_pyqt.RadarPromoAppV2(
             db=db,
             on_search=None,  # Nanti diisi oleh engine
             on_sync=None     # Tidak dipakai di Mode Pengguna
@@ -89,12 +89,12 @@ def main():
         window.set_admin_login_callback(lambda parent=window: show_admin_login(parent))
         window.show()
     else:
-        # Fallback: Dummy Window jika gui_v2 belum ada
+        # Fallback: Dummy Window jika gui_pyqt belum ada
         window = QWidget()
-        window.setWindowTitle("Menunggu gui_v2.py...")
+        window.setWindowTitle("Menunggu gui_pyqt.py...")
         window.resize(400, 200)
         layout = QVBoxLayout()
-        layout.addWidget(QLabel("GUI belum tersedia.\nSedang menunggu file gui_v2.py..."))
+        layout.addWidget(QLabel("GUI belum tersedia.\nSedang menunggu file gui_pyqt.py..."))
         window.setLayout(layout)
         window.show()
 

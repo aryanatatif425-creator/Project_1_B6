@@ -32,26 +32,26 @@ def filter_by_category(records: list[dict], category: Optional[str]) -> list[dic
         return list(records)
 
     cat_normalised = category.strip()
-    return [r for r in records if r.get("category") == cat_normalised]
+    return [r for r in records if r.get("kategori") == cat_normalised]
 
 
 def filter_by_shop(records: list[dict], shop: Optional[str]) -> list[dict]:
-    """Menyaring data berdasarkan nama toko."""
+    """Menyaring data berdasarkan nama brand retailer."""
     if not shop or shop.strip() in ("", "Semua Toko"):
         return list(records)
     
     shop_normalised = shop.strip().lower()
     # Membandingkan nama toko dengan mengabaikan huruf besar/kecil
-    return [r for r in records if r.get("shop_name", "").lower() == shop_normalised]
+    return [r for r in records if r.get("brand_toko", "").lower() == shop_normalised]
 
 
 def filter_by_price_type(records: list[dict], price_type: Optional[str]) -> list[dict]:
-    """Menyaring data berdasarkan jenis harga (misal: Diskon, Flash Sale, Reguler)."""
+    """Menyaring data berdasarkan jenis harga (misal: PROMO, REGULER)."""
     if not price_type or price_type.strip() in ("", "Semua Jenis"):
         return list(records)
     
     pt_normalised = price_type.strip().lower()
-    return [r for r in records if r.get("price_type", "").lower() == pt_normalised]
+    return [r for r in records if r.get("jenis_harga", "").lower() == pt_normalised]
 
 
 # ─── 2. Smart Search (Eager Loading) ──────────────────────────────────
@@ -77,7 +77,7 @@ def search_by_keyword(records: list[dict], keyword: Optional[str]) -> list[dict]
 
 def sort_by_price(records: list[dict]) -> list[dict]:
     """Mengurutkan harga dari yang termurah."""
-    return sorted(records, key=lambda r: r.get("price_int", 0))
+    return sorted(records, key=lambda r: r.get("harga_promo", 0))
 
 
 # ─── 4. Fungsi Statistik ──────────────────────────────────────────────
@@ -88,14 +88,14 @@ def get_statistics(records: list[dict]) -> dict:
         return {"top_3_toko": [], "komposisi_kategori": {}}
 
     # Mengambil semua nama kategori dan toko dari data
-    categories = [r.get("category", "Lainnya") for r in records]
-    shops = [r.get("shop_name", "Toko Anonim") for r in records]
+    categories = [r.get("kategori", "Lainnya") for r in records]
+    shops = [r.get("brand_toko", "Toko Anonim") for r in records]
 
-    # Menghitung komposisi kategori (misal: {'Makanan': 5, 'Elektronik': 2})
+    # Menghitung komposisi kategori (misal: {'Sembako': 5, 'Elektronik': 2})
     komposisi_kategori = dict(Counter(categories))
     
     # Menghitung toko paling sering muncul, ambil 3 teratas
-    # Outputnya berupa list of tuples: [('Toko A', 10), ('Toko B', 5), ('Toko C', 2)]
+    # Outputnya berupa list of tuples: [('Superindo', 10), ('Toko B', 5), ('Toko C', 2)]
     top_3_toko = Counter(shops).most_common(3)
 
     return {
@@ -107,16 +107,16 @@ def get_statistics(records: list[dict]) -> dict:
 # ─── 5. Fungsi Perubahan Harga ────────────────────────────────────────
 
 def apply_price_changes(records: list[dict]) -> list[dict]:
-    """Menghitung selisih harga jika ada data harga coret (old_price)."""
+    """Menghitung selisih harga jika ada data harga coret (harga_normal)."""
     for r in records:
-        old_price = r.get("old_price", 0)
-        current_price = r.get("price_int", 0)
+        old_price = r.get("harga_normal") or 0 # Fallback 0 jika opsional/None
+        current_price = r.get("harga_promo", 0)
         
-        # Jika ada harga lama dan lebih mahal dari harga sekarang, hitung potongannya
+        # Jika ada harga lama dan lebih mahal dari harga promo sekarang, hitung potongannya
         if old_price > current_price:
-            r["price_drop_amount"] = old_price - current_price
+            r["potongan_harga"] = old_price - current_price
         else:
-            r["price_drop_amount"] = 0
+            r["potongan_harga"] = 0
             
     return records
 
@@ -127,8 +127,8 @@ def validate_recommendations(records: list[dict]) -> list[dict]:
     """Membuang data yang cacat (misalnya tidak ada harga atau tidak ada nama)."""
     valid_records = []
     for r in records:
-        # Cek apakah data memiliki price_int (angka) dan judul produk tidak kosong
-        if r.get("price_int") is not None and r.get("product_name"):
+        # Cek apakah data memiliki harga_promo (angka) dan nama_produk tidak kosong
+        if r.get("harga_promo") is not None and r.get("nama_produk"):
             valid_records.append(r)
     return valid_records
 

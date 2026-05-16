@@ -2,11 +2,19 @@ import json
 import os
 from datetime import datetime
 import requests
+import logging
+import  shutil
 
 # =========================
 # KONFIGURASI FILE
 # =========================
 FILE_PATH = "data_promo.json"
+
+logging.basicConfig(
+    filename="activity.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 
 # 🔗 API CONFIG
 API_URL = "https://script.google.com/macros/s/AKfycbyYXsTk2KoKliez2uFMdOfMC5Lc3jbyWYb2lt_1M5AX9jS1NYcoZvHb0JxAngD2jIkTkA/exec?sheet=Promo"
@@ -32,9 +40,15 @@ def read_local_data():
 # =========================
 def write_local_data(data):
     """Menulis data ke file data_promo.json"""
+
+    # backup file lama
+    if os.path.exists(FILE_PATH):
+        shutil.copy(FILE_PATH, "data_promo_backup.json")
+
     with open(FILE_PATH, "w") as file:
         json.dump(data, file, indent=2)
 
+    logging.info("Data lokal berhasil ditulis")    
 # =========================
 # GENERATE ID
 # =========================
@@ -91,6 +105,7 @@ def add_promo(
 
     data.append(new_promo)
     write_local_data(data)
+    logging.info(f"Promo ditambahkan: {new_id}")
 
     print("✅ Promo berhasil ditambahkan!")
 # =========================
@@ -98,41 +113,38 @@ def add_promo(
 # =========================
 def fetch_cloud_data():
     try:
-        response = requests.get(API_URL, params={
-            "sheet": "Promo",
-            "api_key": API_KEY
-        })
+        response = requests.get(API_URL)
 
         response.raise_for_status()
+
         data = response.json()
 
-        print(f"☁️ Fetch sukses: {len(data)} data")
+        logging.info(f"Fetch cloud sukses ({len(data)} data)")
         return data
 
     except Exception as e:
-        print("❌ Gagal fetch:", e)
+        logging.error(f"Fetch cloud gagal: {e}")
         return []
-
 # =========================
 # PUSH TO GOOGLE SHEET
 # =========================
 def push_promo_to_cloud(data):
     try:
         response = requests.post(API_URL, json={
-            "api_key": API_KEY,
-            "sheet": "Promo",
-            "data": data
-        })
+    "data": data
+    })
+
+        print(response.text)
 
         response.raise_for_status()
 
-        print("☁️ Push sukses!")
+        logging.info(f"Push cloud sukses ({len(data)} data)")
         return True
 
     except Exception as e:
-        print("❌ Gagal push:", e)
+        logging.error(f"Push cloud gagal: {e}")
+        print(e)
         return False
-
 # =========================
 # SYNC LOCAL → CLOUD
 # =========================
@@ -147,9 +159,8 @@ def sync_to_cloud():
 def sync_from_cloud():
     data = fetch_cloud_data()
 
-    if not data:
-        print("❌ Cloud kosong, batal overwrite local")
-        return
-
-    write_local_data(data)
-    print("✅ Local updated dari cloud")
+    if data:
+        write_local_data(data)
+        logging.info("Sync from cloud berhasil")
+    else:
+        logging.warning("Cloud kosong, sync dibatalkan")

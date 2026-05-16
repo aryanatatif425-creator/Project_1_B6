@@ -5,9 +5,9 @@ Implements the core data-processing pipeline:
   1. Filter: Area, Kategori, Toko, Jenis Harga
   2. Smart Search: Teks cepat (search_vector)
   3. Optimised Sort: Timsort bawaan Python
-  4. Statistik: Top 3 Toko, Komposisi Kategori
-  5. Perubahan Harga: Kalkulasi selisih harga
-  6. Validasi: Memastikan kelayakan data
+  4. Statistik: Top 3 Cabang, Komposisi Kategori
+  5. Perubahan Harga: Kalkulasi selisih harga & persentase diskon
+  6. Validasi: Memastikan kelayakan data (ID, Harga, Nama)
 """
 
 import logging
@@ -83,19 +83,18 @@ def sort_by_price(records: list[dict]) -> list[dict]:
 # ─── 4. Fungsi Statistik ──────────────────────────────────────────────
 
 def get_statistics(records: list[dict]) -> dict:
-    """Menghasilkan Top 3 Toko dan Komposisi Kategori dari data yang sedang ditampilkan."""
+    """Menghasilkan Top 3 Cabang Toko dan Komposisi Kategori dari data yang sedang ditampilkan."""
     if not records:
         return {"top_3_toko": [], "komposisi_kategori": {}}
 
-    # Mengambil semua nama kategori dan toko dari data
+    # Mengambil semua nama kategori dan nama cabang dari data
     categories = [r.get("kategori", "Lainnya") for r in records]
-    shops = [r.get("brand_toko", "Toko Anonim") for r in records]
+    shops = [r.get("nama_cabang", "Cabang Anonim") for r in records]
 
     # Menghitung komposisi kategori (misal: {'Sembako': 5, 'Elektronik': 2})
     komposisi_kategori = dict(Counter(categories))
     
-    # Menghitung toko paling sering muncul, ambil 3 teratas
-    # Outputnya berupa list of tuples: [('Superindo', 10), ('Toko B', 5), ('Toko C', 2)]
+    # Menghitung cabang paling sering muncul, ambil 3 teratas
     top_3_toko = Counter(shops).most_common(3)
 
     return {
@@ -107,16 +106,19 @@ def get_statistics(records: list[dict]) -> dict:
 # ─── 5. Fungsi Perubahan Harga ────────────────────────────────────────
 
 def apply_price_changes(records: list[dict]) -> list[dict]:
-    """Menghitung selisih harga jika ada data harga coret (harga_normal)."""
+    """Menghitung selisih harga (perubahan_harga) dan persentase diskon."""
     for r in records:
         old_price = r.get("harga_normal") or 0 # Fallback 0 jika opsional/None
         current_price = r.get("harga_promo", 0)
         
         # Jika ada harga lama dan lebih mahal dari harga promo sekarang, hitung potongannya
         if old_price > current_price:
-            r["potongan_harga"] = old_price - current_price
+            r["perubahan_harga"] = old_price - current_price
+            # Algoritma perhitungan diskon persen (dibulatkan 2 angka di belakang koma)
+            r["diskon_persen"] = round((r["perubahan_harga"] / old_price) * 100, 2)
         else:
-            r["potongan_harga"] = 0
+            r["perubahan_harga"] = 0
+            r["diskon_persen"] = 0
             
     return records
 
@@ -124,11 +126,11 @@ def apply_price_changes(records: list[dict]) -> list[dict]:
 # ─── 6. Validasi Data Rekomendasi ─────────────────────────────────────
 
 def validate_recommendations(records: list[dict]) -> list[dict]:
-    """Membuang data yang cacat (misalnya tidak ada harga atau tidak ada nama)."""
+    """Membuang data yang cacat (misalnya tidak ada ID, harga, atau nama produk)."""
     valid_records = []
     for r in records:
-        # Cek apakah data memiliki harga_promo (angka) dan nama_produk tidak kosong
-        if r.get("harga_promo") is not None and r.get("nama_produk"):
+        # Cek apakah data memiliki id, harga_promo (angka), dan nama_produk tidak kosong
+        if r.get("id") and r.get("harga_promo") is not None and r.get("nama_produk"):
             valid_records.append(r)
     return valid_records
 

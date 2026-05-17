@@ -60,12 +60,12 @@ def generate_id(retailer_brand, branch_name, item_name):
 # ADD PROMO
 # =========================
 def add_promo(
-    item_name,
-    retailer_brand,
-    branch_name,
-    category,
+    nama_produk,
+    brand_toko,
+    nama_cabang,
+    kategori,
     area_tags,
-    price_int,
+    harga_normal,
 
     harga_promo,
     diskon_persen,
@@ -75,23 +75,23 @@ def add_promo(
 ):
     data = read_local_data()
 
-    new_id = generate_id(retailer_brand, branch_name, item_name)
+    id_promo = generate_id(brand_toko, nama_cabang, nama_produk)
 
     # cek duplikat
     for promo in data:
-        if promo["id"] == new_id:
+        if promo["id"] == id_promo:
             print("❌ Promo sudah ada!")
             return
 
-    new_promo = {
-        "id": new_id,
+    promo_baru = {
+        "id": id_promo,
         "timestamp_scrape": datetime.now().isoformat(),
-        "nama_produk": item_name,
-        "brand_toko": retailer_brand,
-        "nama_cabang": branch_name,
-        "kategori": category,
+        "nama_produk": nama_produk,
+        "brand_toko": brand_toko,
+        "nama_cabang": nama_cabang,
+        "kategori": kategori,
         "area_tags": area_tags,
-        "harga_normal": price_int,
+        "harga_normal": harga_normal,
         "harga_promo": harga_promo,
         "diskon_persen": diskon_persen,
         "perubahan_harga": perubahan_harga,
@@ -100,12 +100,13 @@ def add_promo(
         "display_harga": f"Rp {harga_promo:,}".replace(",", "."),
         "image_url": "https://placehold.co/200x200?text=Promo",
         "logo_url": "",
-        "search_vector": f"{item_name} {retailer_brand} {branch_name}".lower()
+        "search_vector": f"{nama_produk} {brand_toko} {nama_cabang}".lower()
     }
 
-    data.append(new_promo)
+    data.append(promo_baru)
     write_local_data(data)
-    logging.info(f"Promo ditambahkan: {new_id}")
+
+    logging.info(f"Promo ditambahkan: {id_promo}")
 
     print("✅ Promo berhasil ditambahkan!")
 # =========================

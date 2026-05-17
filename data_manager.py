@@ -17,8 +17,8 @@ logging.basicConfig(
 )
 
 # 🔗 API CONFIG
-API_URL = "https://script.google.com/macros/s/AKfycbyYXsTk2KoKliez2uFMdOfMC5Lc3jbyWYb2lt_1M5AX9jS1NYcoZvHb0JxAngD2jIkTkA/exec?sheet=Promo"
-API_KEY = "4dfa489bff8831a80b449061b8247204"
+APPS_SCRIPT_KEY = "https://script.google.com/macros/s/AKfycbyYXsTk2KoKliez2uFMdOfMC5Lc3jbyWYb2lt_1M5AX9jS1NYcoZvHb0JxAngD2jIkTkA/exec?sheet=Promo"
+IMGBB_API_KEY = "4dfa489bff8831a80b449061b8247204"
 
 # =========================
 # READ LOCAL JSON
@@ -114,7 +114,7 @@ def add_promo(
 # =========================
 def fetch_cloud_data():
     try:
-        response = requests.get(API_URL)
+        response = requests.get(APPS_SCRIPT_KEY)
 
         response.raise_for_status()
 
@@ -131,7 +131,7 @@ def fetch_cloud_data():
 # =========================
 def push_promo_to_cloud(data):
     try:
-        response = requests.post(API_URL, json={
+        response = requests.post(APPS_SCRIPT_KEY, json={
     "data": data
     })
 

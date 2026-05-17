@@ -42,25 +42,25 @@ def jalankan_sinkronisasi(progress_bar, log_widget, root):
     try:
         import scraper
         
-        # Tahap 1: Inisialisasi
+
         log_widget.insert(tk.END, tulis_log('[SCRAPING] Memulai proses sinkronisasi data dari web...'))
         log_widget.see(tk.END)
         progress_bar["value"] = 10
         root.update_idletasks()
         
-        # Tahap 2: Eksekusi Engine Scraper
+
         data_mentah, errors = scraper.run_scraper()
         progress_bar["value"] = 50
         root.update_idletasks()
         
-        # Tahap 3: Pelaporan Parsial Error Retailer
+
         if errors:
             log_widget.insert(tk.END, tulis_log(f'[WARN] {len(errors)} retailer terganggu selama scraping.'))
             for err in errors:
                 log_widget.insert(tk.END, tulis_log(f'   -> Error Log: {err}'))
             log_widget.see(tk.END)
 
-        # Tahap 4: Penanganan Mekanisme Fallback Data Cadangan
+
         if not data_mentah:
             log_widget.insert(tk.END, tulis_log('[SCRAPING] Kegagalan sistem terdeteksi. Mengaktifkan data demo...'))
             log_widget.see(tk.END)
@@ -69,7 +69,7 @@ def jalankan_sinkronisasi(progress_bar, log_widget, root):
         progress_bar["value"] = 80
         root.update_idletasks()
         
-        # Tahap 5: Persistensi Data ke Penyimpanan Lokal
+
         data_manager.write_local_data(data_mentah)
         
         progress_bar["value"] = 100
@@ -114,7 +114,7 @@ def jalankan_upload(progress_bar, log_widget, root):
         progress_bar["value"] = 50
         root.update_idletasks()
         
-        # Mengirim data ke Google Sheets Cloud Database via Data Manager Module
+
         berhasil = data_manager.push_promo_to_cloud(data)
         
         progress_bar["value"] = 100
@@ -152,9 +152,7 @@ def segarkan_log_viewer(log_widget):
         log_widget.insert(tk.END, "Log aktivitas kosong.\n")
     log_widget.see(tk.END)
 
-# ========================================================
-# KONTROLLER ANTARMUKA GUI (TKINTER INTERFACE)
-# ========================================================
+
 
 def buat_window(parent=None):
     root = tk.Toplevel(parent) if parent else tk.Tk()
@@ -162,22 +160,22 @@ def buat_window(parent=None):
     root.geometry("680x560")
     root.configure(bg="#F3F4F6")
     
-    # 1. Komponen Header
+
     tk.Label(root, text='🛠️ Radar Promo Admin Dashboard',
              font=('Arial', 18, 'bold'), bg='#F3F4F6', fg='#1E3A8A').pack(pady=(15, 5))
     tk.Label(root, text='Modul Pengelolaan Data Otomatis & Pemantauan Log',
              font=('Arial', 10), bg='#F3F4F6', fg='#4B5563').pack(pady=(0, 15))
     
-    # 2. Frame Operasional Utama
+
     main_frame = tk.Frame(root, bg='#FFFFFF', bd=1, relief='solid', highlightthickness=0)
     main_frame.pack(fill='x', padx=25, pady=5)
     
-    # Sub-Komponen Status Progress Bar
+
     tk.Label(main_frame, text='Status Jalur Proses Antrean Pemeliharaan Data:', font=('Arial', 9), bg='#FFFFFF', fg='#374151').pack(anchor='w', padx=20, pady=(10, 2))
     progress_bar = ttk.Progressbar(main_frame, orient='horizontal', length=580, mode='determinate')
     progress_bar.pack(padx=20, pady=(0, 15))
     
-    # Panel Kontrol Tombol Aksi
+
     panel_tombol = tk.Frame(main_frame, bg='#FFFFFF')
     panel_tombol.pack(fill='x', padx=20, pady=(0, 10))
     
@@ -196,7 +194,7 @@ def buat_window(parent=None):
                                  command=lambda: segarkan_log_viewer(log_widget))
     btn_refresh_log.pack(side='right')
 
-    # 3. Lapisan Komponen Log Viewer System
+  
     log_frame = tk.Frame(root, bg='#F3F4F6')
     log_frame.pack(fill='both', expand=True, padx=25, pady=10)
     
@@ -205,7 +203,7 @@ def buat_window(parent=None):
     log_widget = scrolledtext.ScrolledText(log_frame, height=12, font=('Consolas', 9.5), bg='#1F2937', fg='#10B981', insertbackground='white')
     log_widget.pack(fill='both', expand=True)
     
-    # Muat log bawaan saat inisialisasi aplikasi dibuka
+  
     segarkan_log_viewer(log_widget)
     tulis_log("[SYSTEM] Sesi konsol dasbor admin berhasil dibuka.")
     log_widget.insert(tk.END, f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [SYSTEM] Dasbor Admin Siap Digunakan.\n")

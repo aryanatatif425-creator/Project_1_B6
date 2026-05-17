@@ -24,13 +24,11 @@ def ekstrak_satu_produk(tag_produk, label_retailer):
     """Ekstrak semua field dari satu elemen produk HTML secara aman."""
     data = {}
     
-    # 1. Identitas Dasar (Nama Produk)
     el_nama = tag_produk.find('p', class_='product-name') or tag_produk.find('div', class_='title')
     data['item_name'] = el_nama.get_text(strip=True) if el_nama else "Produk Tanpa Nama"
     data['retailer_brand'] = label_retailer
     data['category'] = "Kebutuhan Harian"
     
-    # 2. Ekstraksi Harga Promo / Harga Int
     el_promo = tag_produk.find('span', class_='sale-price') or tag_produk.find('span', class_='price')
     if el_promo:
         teks_promo = el_promo.get_text(strip=True)
@@ -41,7 +39,6 @@ def ekstrak_satu_produk(tag_produk, label_retailer):
     
     data['price_int'] = data['harga_promo']
 
-    # 3. BARU (Minggu 10): Ekstraksi Harga Normal (Coret)
     el_normal = tag_produk.find('span', class_='original-price') or tag_produk.find('span', class_='old-price')
     if el_normal:
         teks = el_normal.get_text(strip=True)
@@ -50,26 +47,23 @@ def ekstrak_satu_produk(tag_produk, label_retailer):
     else:
         data['harga_normal'] = data['harga_promo'] # Jika tidak ada harga coret, samakan dengan harga promo
 
-    # Perhitungan Diskon Persen secara Otomatis
     if data['harga_normal'] > 0 and data['harga_normal'] > data['harga_promo']:
         selisih = data['harga_normal'] - data['harga_promo']
         data['diskon_persen'] = round((selisih / data['harga_normal']) * 100, 1)
     else:
         data['diskon_persen'] = 0.0
 
-    # 4. BARU (Minggu 10): Ekstraksi Periode Promo
     el_periode = tag_produk.find('p', class_='promo-period') or tag_produk.find('div', class_='period')
     if el_periode:
         data['periode_promo'] = el_periode.get_text(strip=True)
     else:
         data['periode_promo'] = "Periode tidak tersedia"
 
-    # 5. BARU (Minggu 10): Ekstraksi Jenis Harga
     el_jenis = tag_produk.find('span', class_='price-type') or tag_produk.find('span', class_='label')
     if el_jenis:
         data['jenis_harga'] = el_jenis.get_text(strip=True).upper()
     else:
-        # Jika tidak ada label diskon khusus/member, default ke REGULER atau PROMO tergantung diskon
+       
         data['jenis_harga'] = "PROMO" if data['diskon_persen'] > 0 else "REGULER"
         
     data['display_harga'] = f"Rp {data['harga_promo']:,}".replace(',', '.')
@@ -83,19 +77,19 @@ def scrape_retailer(slug, label):
     soup = get_soup(url)
     
     products = []
-    # Mengambil elemen kontainer item produk (menyesuaikan struktur card hemat.id)
+    
     items = soup.find_all("div", class_="product-card") or soup.find_all("div", class_="item")
     
-    # Jika seandainya struktur class card tidak terbaca, gunakan fallback pencarian div ber-Rp
+    
     if not items:
         div_items = soup.find_all("div")
         for item in div_items:
             if "Rp" in item.get_text():
-                # Pastikan div memiliki kedalaman teks nama produk pendek
+    
                 if len(item.get_text()) < 300 and item.find('span'):
                     items.append(item)
                     
-    for item in items[:10]: # Limit 10 item per retailer untuk optimasi beban tugas
+    for item in items[:10]: 
         try:
             produk = ekstrak_satu_produk(item, label)
             if produk['harga_promo'] > 0:
@@ -137,7 +131,7 @@ def run_scraper():
             print(f"  X {msg}")
             errors.append(msg)
             
-    # Ringkasan Eksekusi Terminal
+    
     print("\n" + "="*50)
     print(f"Hasil Akhir Scraping: {len(all_items)} item sukses dikumpulkan.")
     if errors:
@@ -219,7 +213,7 @@ def get_demo_data():
     ]
 
 if __name__ == "__main__":
-    # Test lokal driver independen
+    
     hasil, errs = run_scraper()
     if not hasil:
         print("\nMenggunakan Fallback Data Demo...")

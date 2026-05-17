@@ -17,7 +17,7 @@ logging.basicConfig(
 )
 
 # 🔗 API CONFIG
-APPS_SCRIPT_KEY = "https://script.google.com/macros/s/AKfycbyYXsTk2KoKliez2uFMdOfMC5Lc3jbyWYb2lt_1M5AX9jS1NYcoZvHb0JxAngD2jIkTkA/exec?sheet=Promo"
+APPS_SCRIPT_KEY = "https://script.google.com/macros/s/AKfycby5cjcZleX4DxmX9o5pixs49EQoYnvKapk-q_yVK6YrAcRAJPXm3AY6rBYr8Fs6nszfcw/exec?sheet=Promo"
 IMGBB_API_KEY = "4dfa489bff8831a80b449061b8247204"
 
 # =========================
@@ -113,18 +113,28 @@ def add_promo(
 # FETCH FROM GOOGLE SHEET
 # =========================
 def fetch_cloud_data():
+
     try:
-        response = requests.get(APPS_SCRIPT_KEY)
+
+        response = requests.get(
+            APPS_SCRIPT_KEY,
+            params={
+                "sheet": "Promo"
+            }
+        )
 
         response.raise_for_status()
 
-        data = response.json()
+        result = response.json()
 
-        logging.info(f"Fetch cloud sukses ({len(data)} data)")
-        return data
+        logging.info("Fetch cloud sukses")
+
+        return result["data"]
 
     except Exception as e:
+
         logging.error(f"Fetch cloud gagal: {e}")
+
         return []
 # =========================
 # PUSH TO GOOGLE SHEET

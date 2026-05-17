@@ -154,7 +154,7 @@ def segarkan_log_viewer(log_widget):
 
 
 
-def buat_window(parent=None):
+def run_dashboard(parent=None):
     root = tk.Toplevel(parent) if parent else tk.Tk()
     root.title("Radar Promo Admin Dashboard v2.0")
     root.geometry("680x560")
@@ -211,4 +211,4 @@ def buat_window(parent=None):
     root.mainloop()
 
 if __name__ == "__main__":
-    buat_window()
+    run_dashboard()

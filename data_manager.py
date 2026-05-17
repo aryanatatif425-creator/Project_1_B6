@@ -165,3 +165,40 @@ def sync_from_cloud():
         logging.info("Sync from cloud berhasil")
     else:
         logging.warning("Cloud kosong, sync dibatalkan")
+
+# =========================
+# UPLOAD FOTO KE IMGBB
+# =========================
+def upload_photo(file_path):
+
+    try:
+
+        with open(file_path, 'rb') as f:
+
+            response = requests.post(
+                'https://api.imgbb.com/1/upload',
+
+                params={
+                    'key': IMGBB_API_KEY
+                },
+
+                files={
+                    'image': f
+                },
+
+                timeout=30
+            )
+
+        response.raise_for_status()
+
+        url = response.json()['data']['url']
+
+        logging.info(f"Foto berhasil diunggah: {url}")
+
+        return url
+
+    except Exception as e:
+
+        logging.error(f"Gagal upload foto: {e}")
+
+        return None

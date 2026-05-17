@@ -106,19 +106,23 @@ def get_statistics(records: list[dict]) -> dict:
 # ─── 5. Fungsi Perubahan Harga ────────────────────────────────────────
 
 def apply_price_changes(records: list[dict]) -> list[dict]:
-    """Menghitung selisih harga (perubahan_harga) dan persentase diskon."""
+    """
+    Menghitung perubahan harga untuk setiap produk.
+    - Membandingkan harga_normal dengan harga_promo.
+    - Menyimpan selisih di field 'perubahan_harga' (rupiah).
+    - Jika tidak ada harga_normal, perubahan_harga = 0.
+    - Menghitung 'diskon_persen' (tambahan dari evaluasi sebelumnya).
+    """
     for r in records:
-        old_price = r.get("harga_normal") or 0 # Fallback 0 jika opsional/None
-        current_price = r.get("harga_promo", 0)
+        harga_normal = r.get('harga_normal', 0) or 0
+        harga_promo  = r.get('harga_promo', 0) or 0
         
-        # Jika ada harga lama dan lebih mahal dari harga promo sekarang, hitung potongannya
-        if old_price > current_price:
-            r["perubahan_harga"] = old_price - current_price
-            # Algoritma perhitungan diskon persen (dibulatkan 2 angka di belakang koma)
-            r["diskon_persen"] = round((r["perubahan_harga"] / old_price) * 100, 2)
+        if harga_normal > 0 and harga_promo > 0 and harga_normal > harga_promo:
+            r['perubahan_harga'] = harga_normal - harga_promo
+            r['diskon_persen'] = round((r['perubahan_harga'] / harga_normal) * 100, 2)
         else:
-            r["perubahan_harga"] = 0
-            r["diskon_persen"] = 0
+            r['perubahan_harga'] = 0
+            r['diskon_persen'] = 0
             
     return records
 

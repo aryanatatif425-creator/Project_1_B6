@@ -6,8 +6,8 @@ import logging
 
 # ─── Import modul tim ─────────────────────────────────────────────
 try:
-    import gui_pyqt          # GUI utama 
-    import data_manager    # Pengelola data 
+    import PyQt6         # GUI utama 
+    import data_manager  # Pengelola data 
     import engine           # Mesin logika 
 except ImportError as e:
     print(f"Modul belum tersedia: {e}")

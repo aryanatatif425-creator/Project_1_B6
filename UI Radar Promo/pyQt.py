@@ -8,18 +8,18 @@ from io import BytesIO
 from datetime import datetime
 from PIL import Image, ImageDraw
 
-from PySide6.QtWidgets import (
+from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QLineEdit, QScrollArea, QGridLayout,
     QFrame, QStackedWidget, QSizePolicy, QComboBox, QDialog,
-    QGraphicsDropShadowEffect, QMessageBox
+    QGraphicsDropShadowEffect, QMessageBox, QSlider, QTextEdit
 )
-from PySide6.QtCore import Qt, QTimer, Signal, QThread, QObject, QRect
-from PySide6.QtGui import (
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal as Signal, QThread, QObject, QRect
+from PyQt6.QtGui import (
     QFont, QPixmap, QPainter, QColor, QLinearGradient, QBrush,
     QPen, QPainterPath, QImage, QFontMetrics
 )
-from PySide6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineWidgets import QWebEngineView
 
 PRODUCTS = [
     {"id":"1",  "name":"Beras Premium 5kg",        "category":"Sembako",        "price":65000, "store":"Borma Toserba Dakota",    "area":"Ciwaruga",    "distance":"1.2 km", "image":"https://images.unsplash.com/photo-1586201375761-83865001e31c?w=400&h=400&fit=crop"},
@@ -205,45 +205,58 @@ class BannerWidget(QWidget):
     def __init__(self, t):
         super().__init__()
         self.t = t
-        self.setFixedHeight(168)
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(52, 0, 52, 0)
+        self.setFixedHeight(140)
+        
+        main_lay = QVBoxLayout(self)
+        main_lay.setContentsMargins(36, 12, 36, 12)
+        
+        self.bg = QFrame()
+        self.bg.setStyleSheet("background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #10b981, stop:1 #14b8a6); border-radius: 16px;")
+        
+        lay = QHBoxLayout(self.bg)
+        lay.setContentsMargins(32, 16, 32, 16)
+        lay.setSpacing(16)
+        
+        self.left_img = QLabel()
+        self.left_img.setFixedSize(80, 80)
+        self.left_img.setStyleSheet("background:rgba(255,255,255,0.2);border-radius:12px;")
+        self.left_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.left_img.setText("📷")
+        self.left_img.setFont(QFont("Arial", 20))
+        lay.addWidget(self.left_img, alignment=Qt.AlignmentFlag.AlignVCenter)
         
         text_lay = QVBoxLayout()
         text_lay.setSpacing(4)
         text_lay.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-        self.title = QLabel("Promo Terbaru untuk Mahasiswa")
-        self.title.setFont(QFont("Arial", 30, QFont.Weight.Bold))
-        self.title.setStyleSheet("color:white;background:transparent;padding:0; margin:0;")
-        self.sub = QLabel("Hemat lebih banyak dengan promo terbaik dari supermarket terdekat")
+        
+        self.title = QLabel("🔥 Promo Terbaru untuk Mahasiswa")
+        self.title.setFont(QFont("Arial", 20, QFont.Weight.Bold))
+        self.title.setStyleSheet("color:white;background:transparent;")
+        
+        self.sub = QLabel("Dapatkan harga termurah hari ini di sekitar Polban")
         self.sub.setFont(QFont("Arial", 13))
-        self.sub.setStyleSheet("color:rgba(255,255,255,210);background:transparent;")
+        self.sub.setStyleSheet("color:rgba(255,255,255,230);background:transparent;")
+        
         text_lay.addWidget(self.title)
         text_lay.addWidget(self.sub)
-        
         lay.addLayout(text_lay)
         lay.addStretch()
         
         self.img_lbl = QLabel()
         px = QPixmap("belanja-rp.png")
         if not px.isNull():
-            px = px.scaledToHeight(180, Qt.TransformationMode.SmoothTransformation)
+            px = px.scaledToHeight(90, Qt.TransformationMode.SmoothTransformation)
             self.img_lbl.setPixmap(px)
         else:
-            self.img_lbl.setText("🛒")
-            self.img_lbl.setFont(QFont("Arial", 40))
+            self.img_lbl.setText("🛒✨")
+            self.img_lbl.setFont(QFont("Arial", 36))
         self.img_lbl.setStyleSheet("background:transparent;")
-        lay.addWidget(self.img_lbl, alignment=Qt.AlignmentFlag.AlignBottom)
-    def paintEvent(self, e):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        g = QLinearGradient(0, 0, self.width(), 0)
-        g.setColorAt(0, QColor(self.t["banner_from"]))
-        g.setColorAt(1, QColor(self.t["banner_to"]))
-        p.fillRect(self.rect(), QBrush(g))
+        lay.addWidget(self.img_lbl, alignment=Qt.AlignmentFlag.AlignVCenter)
+        
+        main_lay.addWidget(self.bg)
+
     def apply_theme(self, t):
         self.t = t
-        self.update()
 
 class Toast(QLabel):
     def __init__(self, parent):
@@ -271,28 +284,29 @@ class Toast(QLabel):
 # PRODUCT CARD
 # ═══════════════════════════════════════════════════════════════════════════════
 
-CARD_W, IMG_H = 248, 195
+CARD_W, IMG_H = 220, 160
 
 class ProductCard(Card):
     add_clicked = Signal(dict)
     def __init__(self, product, t, parent=None):
-        super().__init__(t["card_bg"], t["card_border"], 22, parent)
+        super().__init__(t["card_bg"], t["card_border"], 12, parent)
         self.product = product
         self.t = t
-        self.setFixedWidth(CARD_W)
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Preferred)
+        self.setFixedSize(CARD_W, 360)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         self._loaders = []
         self._build()
-        drop_shadow(self, 18, "#00000015", 4)
+        drop_shadow(self, 10, "#00000015", 2)
 
     def _build(self):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(0)
-        # image
+        
         self.img_cont = QWidget()
         self.img_cont.setFixedSize(CARD_W, IMG_H)
-        self.img_cont.setStyleSheet(f"background:{self.t['card_img_bg']};border-radius:22px 22px 0 0;")
+        self.img_cont.setStyleSheet(f"background:{self.t['card_img_bg']};border-radius:12px 12px 0 0;")
+        
         self.img_lbl = QLabel(self.img_cont)
         self.img_lbl.setFixedSize(CARD_W, IMG_H)
         self.img_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -300,93 +314,82 @@ class ProductCard(Card):
         self.img_lbl.setFont(QFont("Arial", 22))
         self.img_lbl.setStyleSheet("background:transparent;color:#9ca3af;")
         lay.addWidget(self.img_cont)
-        # info
+        
+        is_promo = self.product.get("is_promo", self.product["id"] in PROMO_IDS)
+        if is_promo:
+            self.promo_overlay = QLabel("🔥 Diskon 20%", self.img_cont)
+            self.promo_overlay.setFont(QFont("Arial", 8, QFont.Weight.Bold))
+            self.promo_overlay.setStyleSheet("background:#10b981;color:white;border-radius:6px;padding:4px 8px;")
+            self.promo_overlay.move(8, 8)
+        
         info = QWidget()
         info.setStyleSheet("background:transparent;")
         il = QVBoxLayout(info)
-        il.setContentsMargins(14, 10, 14, 14)
-        il.setSpacing(4)
-        # badges row
+        il.setContentsMargins(14, 12, 14, 14)
+        il.setSpacing(6)
+        
+        self.cat_badge = QLabel(self.product["category"])
+        self.cat_badge.setFont(QFont("Arial", 8, QFont.Weight.Bold))
+        self.cat_badge.setStyleSheet(f"background:{self.t['badge_bg']};color:{self.t['badge_fg']};border-radius:4px;padding:2px 4px;")
+        
         badge_row = QHBoxLayout()
         badge_row.setSpacing(4)
-        self.cat_badge = QLabel(self.product["category"])
-        self.cat_badge.setFont(QFont("Arial", 9))
-        self.cat_badge.setFixedHeight(20)
-        self.cat_badge.setStyleSheet(f"background:{self.t['badge_bg']};color:{self.t['badge_fg']};border-radius:10px;padding:0 8px;")
         badge_row.addWidget(self.cat_badge)
-        is_promo = self.product["id"] in PROMO_IDS
-        if is_promo:
-            promo_badge = QLabel("🔥 PROMO")
-            promo_badge.setFont(QFont("Arial", 8, QFont.Weight.Bold))
-            promo_badge.setFixedHeight(20)
-            promo_badge.setStyleSheet(f"background:{self.t['promo_badge_bg']};color:{self.t['promo_badge_fg']};border-radius:10px;padding:0 8px;")
-            badge_row.addWidget(promo_badge)
         badge_row.addStretch()
         il.addLayout(badge_row)
-        # name
+        
         self.name_lbl = QLabel(self.product["name"])
-        self.name_lbl.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        self.name_lbl.setObjectName("product_name")
+        self.name_lbl.setFont(QFont("Arial", 11, QFont.Weight.Bold))
         self.name_lbl.setWordWrap(True)
-        self.name_lbl.setFixedWidth(CARD_W - 28)
-        self.name_lbl.setStyleSheet(f"color:{self.t['text1']};background:transparent;")
+        self.name_lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        fm = QFontMetrics(self.name_lbl.font())
+        self.name_lbl.setFixedHeight(fm.height() * 2 + 4)
+        self.name_lbl.setStyleSheet(f"color:{self.t['text1']};")
         il.addWidget(self.name_lbl)
         
-        # price
-        price_row = QHBoxLayout()
-        price_row.setSpacing(6)
+        price_col = QVBoxLayout()
+        price_col.setSpacing(2)
         if is_promo:
-            # Strikethrough original price
+            promo_price_val = int(self.product["price"] * 0.8)
+            self.product['effective_price'] = promo_price_val
+            
             orig_price = QLabel(rp(self.product["price"]))
-            orig_font = QFont("Arial", 11)
+            orig_font = QFont("Arial", 9)
             orig_font.setStrikeOut(True)
             orig_price.setFont(orig_font)
-            orig_price.setStyleSheet(f"color:{self.t['text2']};background:transparent;")
+            orig_price.setStyleSheet(f"color:{self.t['text2']};")
             
-            # Promo price
-            promo_price_val = self.product["price"] - 1000
-            self.product['effective_price'] = promo_price_val
             promo_price = QLabel(rp(promo_price_val))
-            promo_price.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-            promo_price.setStyleSheet(f"color:{self.t['price_fg']};background:transparent;")
+            promo_price.setFont(QFont("Arial", 13, QFont.Weight.Bold))
+            promo_price.setStyleSheet(f"color:{self.t['price_fg']};")
             
-            price_row.addWidget(orig_price)
-            price_row.addWidget(promo_price)
+            price_col.addWidget(orig_price)
+            price_col.addWidget(promo_price)
         else:
             self.product['effective_price'] = self.product["price"]
             self.price_lbl = QLabel(rp(self.product["price"]))
-            self.price_lbl.setFont(QFont("Arial", 14, QFont.Weight.Bold))
-            self.price_lbl.setStyleSheet(f"color:{self.t['price_fg']};background:transparent;")
-            price_row.addWidget(self.price_lbl)
-        price_row.addStretch()
-        il.addLayout(price_row)
-
-        # bottom
-        bot = QHBoxLayout()
-        bot.setSpacing(6)
-        sc = QVBoxLayout()
-        sc.setSpacing(1)
-        self.store_lbl = QLabel(self.product["store"])
-        self.store_lbl.setFont(QFont("Arial", 10))
-        self.store_lbl.setStyleSheet(f"color:{self.t['store_fg']};background:transparent;")
-        self.dist_lbl = QLabel(f"📍 {self.product['distance']}")
-        self.dist_lbl.setFont(QFont("Arial", 9))
-        self.dist_lbl.setStyleSheet(f"color:{self.t['dist_fg']};background:transparent;")
-        sc.addWidget(self.store_lbl)
-        sc.addWidget(self.dist_lbl)
-        bot.addLayout(sc)
-        bot.addStretch()
+            self.price_lbl.setFont(QFont("Arial", 13, QFont.Weight.Bold))
+            self.price_lbl.setStyleSheet(f"color:{self.t['price_fg']};")
+            price_col.addWidget(self.price_lbl)
         
+        il.addLayout(price_col)
+
+        self.store_lbl = QLabel(f"🏪 {self.product.get('store_base', self.product['store'])}")
+        self.store_lbl.setFont(QFont("Arial", 9))
+        self.store_lbl.setStyleSheet(f"color:{self.t['store_fg']};")
+        il.addWidget(self.store_lbl)
+
         self.add_btn = QPushButton("+ Tambah")
-        self.add_btn.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-        self.add_btn.setFixedSize(92, 32)
+        self.add_btn.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        self.add_btn.setFixedHeight(30)
         self.add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.add_btn.setStyleSheet(f"QPushButton{{background:{self.t['add_bg']};color:{self.t['add_fg']};border:none;border-radius:16px;}}QPushButton:hover{{background:#e8aabb;}}QPushButton:pressed{{background:#d49aaa;}}")
+        self.add_btn.setStyleSheet(f"QPushButton{{background:#10b981;color:white;border:none;border-radius:6px;}}QPushButton:hover{{background:#059669;}}")
         self.add_btn.clicked.connect(lambda: self.add_clicked.emit(self.product))
-        bot.addWidget(self.add_btn)
-        il.addLayout(bot)
+        il.addWidget(self.add_btn)
+        
         lay.addWidget(info)
         
-        # load image
         sig = _Sig()
         sig.done.connect(self._on_img)
         ldr = ImgLoader(self.product["image"], self.product["id"], CARD_W, IMG_H, sig)
@@ -403,12 +406,111 @@ class ProductCard(Card):
             self.img_lbl.setText("🖼️")
 
     def enterEvent(self, event):
-        drop_shadow(self, 24, "#00000030", 6)
+        drop_shadow(self, 14, "#00000025", 3)
         super().enterEvent(event)
 
     def leaveEvent(self, event):
-        drop_shadow(self, 18, "#00000015", 4)
+        drop_shadow(self, 10, "#00000015", 2)
         super().leaveEvent(event)
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self._show_detail()
+        super().mousePressEvent(event)
+
+    def _show_detail(self):
+        dlg = QDialog(self.window())
+        dlg.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        dlg.setFixedSize(300, 440)
+        dlg.setStyleSheet(f"background:{self.t['card_bg']}; border:1px solid {self.t['card_border']}; border-radius:12px;")
+        drop_shadow(dlg, 20, "#00000030", 4)
+        
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(16, 16, 16, 16)
+        lay.setSpacing(12)
+        
+        header = QHBoxLayout()
+        ttl = QLabel("Detail Promo")
+        ttl.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        ttl.setStyleSheet(f"color:{self.t['text1']};background:transparent;")
+        close_btn = QPushButton("✕")
+        close_btn.setFixedSize(24, 24)
+        close_btn.setStyleSheet(f"background:transparent;color:{self.t['text2']};border:none;font-weight:bold;")
+        close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        close_btn.clicked.connect(dlg.close)
+        header.addWidget(ttl); header.addStretch(); header.addWidget(close_btn)
+        lay.addLayout(header)
+        
+        # Product Image
+        img_lbl = QLabel()
+        img_lbl.setFixedSize(268, 130)
+        img_lbl.setStyleSheet(f"background:{self.t['card_img_bg']}; border-radius:8px;")
+        if hasattr(self, 'img_lbl') and self.img_lbl.pixmap():
+            img_lbl.setPixmap(self.img_lbl.pixmap().scaled(268, 130, Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation))
+        else:
+            img_lbl.setText("🖼️")
+        img_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(img_lbl)
+        
+        pname = QLabel(self.product["name"])
+        pname.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        pname.setWordWrap(True)
+        pname.setStyleSheet(f"color:{self.t['text1']};background:transparent;")
+        lay.addWidget(pname)
+        
+        price_row = QHBoxLayout()
+        price_row.setSpacing(8)
+        is_promo = self.product.get("is_promo", False)
+        if is_promo:
+            op = QLabel(rp(self.product["price"]))
+            f = QFont("Arial", 10); f.setStrikeOut(True); op.setFont(f)
+            op.setStyleSheet(f"color:{self.t['text2']};background:transparent;")
+            pp = QLabel(rp(self.product["effective_price"]))
+            pp.setFont(QFont("Arial", 13, QFont.Weight.Bold))
+            pp.setStyleSheet(f"color:{self.t['price_fg']};background:transparent;")
+            price_row.addWidget(op); price_row.addWidget(pp)
+        else:
+            pp = QLabel(rp(self.product["price"]))
+            pp.setFont(QFont("Arial", 13, QFont.Weight.Bold))
+            pp.setStyleSheet(f"color:{self.t['price_fg']};background:transparent;")
+            price_row.addWidget(pp)
+        price_row.addStretch()
+        lay.addLayout(price_row)
+        
+        lbl_cabang = QLabel("Tersedia di:")
+        lbl_cabang.setFont(QFont("Arial", 10))
+        lbl_cabang.setStyleSheet(f"color:{self.t['text2']};background:transparent;")
+        lay.addWidget(lbl_cabang)
+        
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setStyleSheet("border:none;background:transparent;")
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        c_wid = QWidget()
+        c_wid.setStyleSheet("background:transparent;")
+        c_lay = QVBoxLayout(c_wid)
+        c_lay.setContentsMargins(0,0,0,0)
+        c_lay.setSpacing(8)
+        
+        branches = self.product.get("branches", [{"store": self.product["store"], "distance": self.product["distance"]}])
+        for b in branches:
+            bw = QFrame()
+            bw.setStyleSheet(f"background:{self.t['cart_item_bg']};border-radius:8px;")
+            bl = QVBoxLayout(bw)
+            bl.setContentsMargins(12, 8, 12, 8)
+            sn = QLabel(f"🏪 {b['store']}")
+            sn.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+            sn.setStyleSheet(f"color:{self.t['text1']};background:transparent;")
+            sd = QLabel(f"📍 {b['distance']}")
+            sd.setFont(QFont("Arial", 9))
+            sd.setStyleSheet(f"color:{self.t['text2']};background:transparent;")
+            bl.addWidget(sn); bl.addWidget(sd)
+            c_lay.addWidget(bw)
+            
+        c_lay.addStretch()
+        scroll.setWidget(c_wid)
+        lay.addWidget(scroll)
+        dlg.exec()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -692,7 +794,10 @@ class BarChart(QWidget):
             y = pad_t + chart_h - bh
             path = QPainterPath()
             path.addRoundedRect(x, y, bar_w, bh, 6, 6)
-            p.fillPath(path, color)
+            grad = QLinearGradient(x, y + bh, x, y)
+            grad.setColorAt(0, QColor("#10b981"))
+            grad.setColorAt(1, QColor("#14b8a6"))
+            p.fillPath(path, QBrush(grad))
             fm = QFontMetrics(QFont("Arial", 8))
             lbl = fm.elidedText(label, Qt.TextElideMode.ElideRight, bar_w + gap * 2)
             p.drawText(x - gap // 2, H - pad_b + 8, bar_w + gap, 40,
@@ -982,6 +1087,64 @@ class LokasiPage(QWidget):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# ADMIN DASHBOARD
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class AdminDashboard(QDialog):
+    def __init__(self, parent=None, t=None):
+        super().__init__(parent)
+        self.t = t or LIGHT
+        self.setWindowTitle("Radar Promo Admin Dashboard")
+        self.setFixedSize(600, 500)
+        self.setStyleSheet(f"background:{self.t['setting_bg']};")
+        
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(24, 24, 24, 24)
+        lay.setSpacing(16)
+        
+        hdr = QLabel("Radar Promo Admin Dashboard")
+        hdr.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+        hdr.setStyleSheet(f"color:{self.t['text1']};background:transparent;")
+        lay.addWidget(hdr)
+        
+        c1 = Card(self.t['setting_card_bg'], self.t['card_border'], 12)
+        cl1 = QVBoxLayout(c1)
+        l1 = QLabel("Sinkronisasi Data")
+        l1.setFont(QFont("Arial", 11, QFont.Weight.Bold))
+        l1.setStyleSheet(f"color:{self.t['text1']};background:transparent;")
+        b1 = QPushButton("Sinkronisasi Sekarang")
+        b1.setFixedHeight(36)
+        b1.setCursor(Qt.CursorShape.PointingHandCursor)
+        b1.setStyleSheet(f"background:#6FB8AD;color:white;border-radius:8px;font-weight:bold;")
+        cl1.addWidget(l1); cl1.addWidget(b1)
+        lay.addWidget(c1)
+        
+        c2 = Card(self.t['setting_card_bg'], self.t['card_border'], 12)
+        cl2 = QVBoxLayout(c2)
+        l2 = QLabel("Upload ke Cloud")
+        l2.setFont(QFont("Arial", 11, QFont.Weight.Bold))
+        l2.setStyleSheet(f"color:{self.t['text1']};background:transparent;")
+        b2 = QPushButton("Upload Promo ke Cloud")
+        b2.setFixedHeight(36)
+        b2.setCursor(Qt.CursorShape.PointingHandCursor)
+        b2.setStyleSheet(f"background:#F1C0CC;color:white;border-radius:8px;font-weight:bold;")
+        cl2.addWidget(l2); cl2.addWidget(b2)
+        lay.addWidget(c2)
+        
+        c3 = Card(self.t['setting_card_bg'], self.t['card_border'], 12)
+        cl3 = QVBoxLayout(c3)
+        l3 = QLabel("Log Aktivitas")
+        l3.setFont(QFont("Arial", 11, QFont.Weight.Bold))
+        l3.setStyleSheet(f"color:{self.t['text1']};background:transparent;")
+        
+        log_text = QTextEdit()
+        log_text.setReadOnly(True)
+        log_text.setStyleSheet(f"background:{self.t['input_bg']};color:{self.t['text2']};border:1px solid {self.t['input_border']};border-radius:8px;")
+        log_text.setPlainText("[UPLOAD] upload berhasil\n[SYNC] sinkronisasi selesai\n[INFO] Data dimuat dari data_promo.json (6742 item)")
+        cl3.addWidget(l3); cl3.addWidget(log_text)
+        lay.addWidget(c3)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # PENGATURAN PAGE
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -1073,13 +1236,32 @@ class PengaturanPage(QWidget):
         fht.setFont(QFont("Arial", 15, QFont.Weight.Bold))
         fht.setStyleSheet(f"color:{t['price_fg']};background:transparent;")
         fh.addWidget(fhi); fh.addWidget(fht); fh.addStretch(); fl.addLayout(fh)
-        font_row = QHBoxLayout()
-        font_row.setSpacing(8)
-        for fs in ["Sangat Kecil", "Kecil", "Normal", "Besar", "Sangat Besar"]:
-            fb = PillBtn(fs, fs == self.font_size, t)
-            fb.clicked.connect(lambda _, f=fs: self._set_font(f))
-            font_row.addWidget(fb)
-        font_row.addStretch(); fl.addLayout(font_row)
+        
+        self.font_slider = QSlider(Qt.Orientation.Horizontal)
+        self.font_slider.setMinimum(0)
+        self.font_slider.setMaximum(4)
+        self.font_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
+        self.font_slider.setTickInterval(1)
+        sizes = ["Sangat Kecil", "Kecil", "Normal", "Besar", "Sangat Besar"]
+        if self.font_size in sizes:
+            self.font_slider.setValue(sizes.index(self.font_size))
+        else:
+            self.font_slider.setValue(2)
+            
+        self.font_slider.valueChanged.connect(self._on_font_slider)
+        
+        sl_lay = QHBoxLayout()
+        sl_lay.addWidget(QLabel("A", font=QFont("Arial", 8)))
+        sl_lay.addWidget(self.font_slider)
+        sl_lay.addWidget(QLabel("A", font=QFont("Arial", 16)))
+        fl.addLayout(sl_lay)
+        
+        self.font_lbl = QLabel(f"Terpilih: {self.font_size}")
+        self.font_lbl.setFont(QFont("Arial", 10))
+        self.font_lbl.setStyleSheet(f"color:{t['text2']};background:transparent;")
+        self.font_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        fl.addWidget(self.font_lbl)
+        
         self.main_lay.addWidget(font_card)
         
         
@@ -1162,12 +1344,23 @@ class PengaturanPage(QWidget):
             if user.text() == "admin" and pwd.text() == "admin123":
                 self.is_admin = True
                 self._populate()
+                dash = AdminDashboard(self, self.t)
+                dash.exec()
             else:
                 QMessageBox.warning(self, "Login Gagal", "Username atau password salah!\n(Hint: admin / admin123)")
 
     def _logout(self):
         self.is_admin = False
         self._populate()
+
+    def _on_font_slider(self, val):
+        sizes = ["Sangat Kecil", "Kecil", "Normal", "Besar", "Sangat Besar"]
+        fs = sizes[val]
+        self.font_size = fs
+        if hasattr(self, 'font_lbl'):
+            self.font_lbl.setText(f"Terpilih: {fs}")
+        if self.app:
+            self.app.change_global_font_size(fs)
 
     def _set_font(self, fs):
         self.font_size = fs
@@ -1201,6 +1394,7 @@ class MainWindow(QMainWindow):
         self._apply_theme()
         self._reload_products()
         self._update_sync_lbl()
+        self.change_global_font_size(self.setting_page.font_size)
 
     # ── BUILD ─────────────────────────────────────────────────────────────────
 
@@ -1270,31 +1464,31 @@ class MainWindow(QMainWindow):
         nl.setContentsMargins(28, 0, 28, 0)
         nl.setSpacing(16)
         
-        # Logo with RP
-        logo_btn = QPushButton()
-        logo_lay = QHBoxLayout(logo_btn)
+        # Logo with Placeholder
+        self.logo_btn = QPushButton()
+        self.logo_btn.setFlat(True)
+        self.logo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.logo_btn.setStyleSheet("background:transparent;border:none;")
+        self.logo_btn.clicked.connect(lambda: self._switch_page(0))
+        
+        logo_lay = QHBoxLayout(self.logo_btn)
         logo_lay.setContentsMargins(0, 0, 0, 0)
-        logo_lay.setSpacing(10)
+        logo_lay.setSpacing(8)
         
-        # RP icon
-        rp_icon = QLabel("RP")
-        rp_icon.setFont(QFont("Arial", 18, QFont.Weight.Bold))
-        rp_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        rp_icon.setFixedSize(40, 40)
-        rp_icon.setStyleSheet("background:#6F84B8;color:white;border-radius:12px;")
+        self.logo_img = QLabel()
+        self.logo_img.setFixedSize(140, 40)
+        self.logo_img.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         
-        lt = QLabel("Radar Promo")
-        lt.setFont(QFont("Arial", 20, QFont.Weight.Bold))
-        lt.setStyleSheet("color:#F1C0CC;background:transparent;")
-        
-        logo_lay.addWidget(rp_icon)
-        logo_lay.addWidget(lt)
-        
-        logo_btn.setFlat(True)
-        logo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        logo_btn.setStyleSheet("background:transparent;border:none;")
-        logo_btn.clicked.connect(lambda: self._switch_page(0))
-        nl.addWidget(logo_btn)
+        px = QPixmap("assets/logo.png")
+        if not px.isNull():
+            self.logo_img.setPixmap(px.scaled(140, 40, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        else:
+            self.logo_img.setText("🖼️ LOGO")
+            self.logo_img.setFont(QFont("Arial", 16, QFont.Weight.Bold))
+            self.logo_img.setStyleSheet("color:#10b981;background:transparent;")
+            
+        logo_lay.addWidget(self.logo_img)
+        nl.addWidget(self.logo_btn)
         
         # Search with margin/padding
         search_container = QWidget()
@@ -1404,25 +1598,25 @@ class MainWindow(QMainWindow):
         self.bottom_nav = QFrame()
         self.bottom_nav.setObjectName("bottomNav")
         self.bottom_nav.setFixedHeight(70)
-        drop_shadow(self.bottom_nav, 20, "#00000020", -4)
+        drop_shadow(self.bottom_nav, 20, "#00000015", -4)
         bl = QHBoxLayout(self.bottom_nav)
-        bl.setContentsMargins(0, 0, 0, 0)
-        bl.setSpacing(0)
+        bl.setContentsMargins(16, 0, 16, 0)
+        bl.setSpacing(8)
         self.nav_tabs = [
-            ("⌂", "Beranda", 0), ("➤", "Lokasi", 1), ("%", "Statistik", 2), ("🌣", "Pengaturan", 3),
+            ("⌂", "Beranda", 0), ("🧭", "Jelajah", 1), ("📊", "Statistik", 2), ("⚙️", "Pengaturan", 3),
         ]
         self.bottom_btns = []
         for icon, label, idx in self.nav_tabs:
             btn = QPushButton()
             btn_lay = QVBoxLayout(btn)
-            btn_lay.setContentsMargins(8, 8, 8, 8)
-            btn_lay.setSpacing(2)
+            btn_lay.setContentsMargins(4, 8, 4, 8)
+            btn_lay.setSpacing(4)
             ic = QLabel(icon)
-            ic.setFont(QFont("Arial", 20))
+            ic.setFont(QFont("Arial", 22))
             ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
             ic.setStyleSheet("background:transparent;")
             lb = QLabel(label)
-            lb.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+            lb.setFont(QFont("Arial", 10, QFont.Weight.Bold))
             lb.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lb.setStyleSheet("background:transparent;")
             btn_lay.addWidget(ic)
@@ -1446,13 +1640,13 @@ class MainWindow(QMainWindow):
         for i, (btn, ic, lb) in enumerate(self.bottom_btns):
             is_active = (i == active_idx)
             if is_active:
-                btn.setStyleSheet(f"QPushButton{{background:{t['bottom_active_bg']};border-radius:18px;margin:6px;}}")
-                ic.setStyleSheet(f"background:transparent;color:{t['bottom_active_fg']};")
-                lb.setStyleSheet(f"background:transparent;color:{t['bottom_active_fg']};")
+                btn.setStyleSheet("QPushButton{background:transparent;border:none;}")
+                ic.setStyleSheet(f"background:transparent;color:{t['price_fg']};")
+                lb.setStyleSheet(f"background:transparent;color:{t['price_fg']};font-weight:bold;")
             else:
-                btn.setStyleSheet(f"QPushButton{{background:transparent;border:none;}}QPushButton:hover{{background:{t['pill_off_bg']};border-radius:18px;margin:6px;}}")
+                btn.setStyleSheet(f"QPushButton{{background:transparent;border:none;}}QPushButton:hover{{background:{t['pill_off_bg']}55;border-radius:16px;}}")
                 ic.setStyleSheet(f"background:transparent;color:{t['bottom_fg']};")
-                lb.setStyleSheet(f"background:transparent;color:{t['bottom_fg']};")
+                lb.setStyleSheet(f"background:transparent;color:{t['bottom_fg']};font-weight:normal;")
 
     def _show_cart(self):
         cart = CartPage(self, self.t)
@@ -1461,6 +1655,8 @@ class MainWindow(QMainWindow):
         self.stack.insertWidget(4, cart)
         self.stack.setCurrentIndex(4)
         self._style_bottom_btns(-1)
+        if hasattr(self, 'setting_page'):
+            self.change_global_font_size(self.setting_page.font_size)
 
     # ── PRODUCTS ──────────────────────────────────────────────────────────────
 
@@ -1477,13 +1673,27 @@ class MainWindow(QMainWindow):
         if q:
             prods = [p for p in prods if q in p["name"].lower()
                      or q in p["category"].lower() or q in p["store"].lower()]
-            
+                     
+        grouped = {}
+        for p in prods:
+            store_base = p["store"].split()[0]
+            key = (p["name"], store_base, p["price"])
+            if key not in grouped:
+                np = p.copy()
+                np["store_base"] = store_base
+                np["is_promo"] = np["id"] in PROMO_IDS
+                np["branches"] = [{"store": p["store"], "distance": p["distance"]}]
+                grouped[key] = np
+            else:
+                grouped[key]["branches"].append({"store": p["store"], "distance": p["distance"]})
+                
+        grouped_prods = list(grouped.values())
         if self.sort_opt == "termurah":
-            prods = sorted(prods, key=lambda p: p.get("effective_price", p["price"]))
+            grouped_prods = sorted(grouped_prods, key=lambda p: p.get("effective_price", p["price"]))
         else:
-            prods = sorted(prods, key=lambda p: p.get("effective_price", p["price"]), reverse=True)
+            grouped_prods = sorted(grouped_prods, key=lambda p: p.get("effective_price", p["price"]), reverse=True)
             
-        return prods
+        return grouped_prods
 
     def _reload_products(self):
         while self.prod_grid_lay.count():
@@ -1492,7 +1702,7 @@ class MainWindow(QMainWindow):
                 it.widget().deleteLater()
         self._card_refs.clear()
         prods = self._get_products()
-        COLS = 4
+        COLS = 5
         if not prods:
             lbl = QLabel("😢  Produk tidak ditemukan\nCoba kata kunci atau filter lain")
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1509,6 +1719,9 @@ class MainWindow(QMainWindow):
             self._card_refs.append(card)
         for c in range(COLS):
             self.prod_grid_lay.setColumnStretch(c, 1)
+            
+        if hasattr(self, 'setting_page'):
+            self.change_global_font_size(self.setting_page.font_size)
 
     def _add_to_cart(self, product):
         for ci in self.cart_items:
@@ -1573,24 +1786,63 @@ class MainWindow(QMainWindow):
         self.is_dark = not self.is_dark
         self.t = DARK if self.is_dark else LIGHT
         self.dark_btn.setText("☀︎" if self.is_dark else "⏾")
+        
+        idx = self.stack.currentIndex()
+        
+        self.stack.removeWidget(self.lokasi_page)
+        self.lokasi_page.deleteLater()
+        self.lokasi_page = LokasiPage(self.t)
+        self.stack.insertWidget(1, self.lokasi_page)
+        
+        self.stack.removeWidget(self.stat_page)
+        self.stat_page.deleteLater()
+        self.stat_page = StatistikPage(self.t, app=self)
+        self.stack.insertWidget(2, self.stat_page)
+        
+        self.stack.removeWidget(self.setting_page)
+        self.setting_page.deleteLater()
+        self.setting_page = PengaturanPage(self, self.t)
+        self.stack.insertWidget(3, self.setting_page)
+        
+        if self.stack.widget(4) and isinstance(self.stack.widget(4), CartPage):
+            self.stack.removeWidget(self.stack.widget(4))
+            cart = CartPage(self, self.t)
+            cart.back.connect(lambda: self._switch_page(0))
+            self.stack.insertWidget(4, cart)
+            
+        self.stack.setCurrentIndex(idx)
+        
         self._apply_theme()
         self._reload_products()
+        if hasattr(self.setting_page, 'font_size'):
+            self.change_global_font_size(self.setting_page.font_size)
 
     def change_global_font_size(self, fs):
-        # Base font size is 10. Change according to selection.
-        sizes = {
-            "Sangat Kecil": 8,
-            "Kecil": 9,
-            "Normal": 10,
-            "Besar": 11,
-            "Sangat Besar": 12
-        }
-        size = sizes.get(fs, 10)
+        sizes = {"Sangat Kecil": 10, "Kecil": 11, "Normal": 12, "Besar": 14, "Sangat Besar": 16}
+        size = sizes.get(fs, 12)
+        
         app = QApplication.instance()
         if app:
             font = app.font()
             font.setPointSize(size)
             app.setFont(font)
+            
+        for w in QApplication.allWidgets():
+            if isinstance(w, QLabel) and len(w.text()) <= 2 and any(ord(c) > 1000 for c in w.text()):
+                continue
+            if isinstance(w, QPushButton) and len(w.text()) <= 2 and any(ord(c) > 1000 for c in w.text()):
+                continue
+                
+            try:
+                f = w.font()
+                f.setPointSize(size)
+                w.setFont(f)
+                
+                if w.objectName() == "product_name":
+                    fm = QFontMetrics(f)
+                    w.setFixedHeight(fm.height() * 2 + 4)
+            except:
+                pass
 
     # ── THEME ─────────────────────────────────────────────────────────────────
 

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Radar Promo - Peta</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+        }
+
+        #map {
+            height: 100vh;
+            width: 100%;
+        }
+
+        .radar-pulse {
+            position: absolute;
+            border: 3px solid rgba(42, 129, 203, 0.6);
+            border-radius: 50%;
+            animation: pulse 2s ease-out infinite;
+            pointer-events: none;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(0.5);
+                opacity: 0.8;
+            }
+
+            100% {
+                transform: scale(2.5);
+                opacity: 0;
+            }
+        }
+
+        .leaflet-popup-content {
+            font-family: 'Arial', sans-serif;
+            font-size: 13px;
+        }
+
+        .popup-title {
+            font-weight: bold;
+            font-size: 15px;
+            margin-bottom: 4px;
+        }
+
+        .popup-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-right: 4px;
+        }
+
+        .badge-promo {
+            background: #fef3c7;
+            color: #d97706;
+        }
+
+        .badge-rating {
+            background: #eef1f8;
+            color: #6F84B8;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <script>
+        var map = L.map('map').setView([-6.8701, 107.5954], 14);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        var blueIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-blue.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
+
+        var greenIcon = new L.Icon({
+            iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png',
+            shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
+            iconSize: [25, 41],
+            iconAnchor: [12, 41],
+            popupAnchor: [1, -34],
+            shadowSize: [41, 41]
+        });
+
+        function addRadarEffect(lat, lng) {
+            var pulseCount = 3;
+            for (var i = 0; i < pulseCount; i++) {
+                setTimeout(function () {
+                    var circle = L.circle([lat, lng], {
+                        radius: 200,
+                        color: 'rgba(42, 129, 203, 0.4)',
+                        fillColor: 'rgba(42, 129, 203, 0.1)',
+                        fillOpacity: 0.2,
+                        weight: 2,
+                        className: 'radar-anim'
+                    }).addTo(map);
+
+                    var startTime = Date.now();
+                    var duration = 2000;
+                    var startRadius = 200;
+                    var endRadius = 800;
+
+                    function animate() {
+                        var elapsed = Date.now() - startTime;
+                        var progress = Math.min(elapsed / duration, 1);
+                        var currentRadius = startRadius + (endRadius - startRadius) * progress;
+                        circle.setRadius(currentRadius);
+                        circle.setStyle({
+                            opacity: 1 - progress,
+                            fillOpacity: 0.2 * (1 - progress)
+                        });
+                        if (progress < 1) {
+                            requestAnimationFrame(animate);
+                        } else {
+                            map.removeLayer(circle);
+                        }
+                    }
+                    animate();
+                }, i * 600);
+            }
+        }
+
+        function addStoreMarker(lat, lng, name, branchName, hasPromo, promoCount) {
+            var marker = L.marker([lat, lng], { icon: blueIcon }).addTo(map);
+
+            var popupHtml = '<div class="popup-title">' + name + '</div>';
+            popupHtml += '<div>' + branchName + '</div>';
+            if (hasPromo) {
+                popupHtml += '<span class="popup-badge badge-promo">' + promoCount + ' promo aktif</span>';
+            }
+
+            marker.bindPopup(popupHtml);
+
+            if (hasPromo) {
+                addRadarEffect(lat, lng);
+            }
+        }
+
+        function addRecMarker(lat, lng, name, rating, fotoUrl, menu, harga) {
+            var marker = L.marker([lat, lng], { icon: greenIcon }).addTo(map);
+
+            var popupHtml = '<div class="popup-title">' + name + '</div>';
+            if (menu) popupHtml += '<div>' + menu + '</div>';
+            if (harga) popupHtml += '<div>Rp ' + parseInt(harga).toLocaleString('id-ID') + '</div>';
+            if (rating) popupHtml += '<span class="popup-badge badge-rating">' + rating + '/5</span>';
+            if (fotoUrl) popupHtml += '<br><img src="' + fotoUrl + '" style="width:150px;border-radius:8px;margin-top:6px;">';
+
+            marker.bindPopup(popupHtml);
+        }
+
+        console.log('Peta siap digunakan.');
+    </script>
+</body>
+
+</html>

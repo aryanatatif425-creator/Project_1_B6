@@ -1,0 +1,6 @@
+PyQt6
+PyQt6-WebEngine
+matplotlib
+Pillow
+requests
+beautifulsoup4

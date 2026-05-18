@@ -1,93 +1,96 @@
+"""
+admin_tool.py — Radar Promo Admin Dashboard
+============================================
+Dashboard Admin berbasis Tkinter (aplikasi terpisah).
+Hanya berisi alat sinkronisasi, upload cloud, dan Log Viewer.
+"""
+
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 import threading
 import os
 from datetime import datetime
 
-# Konfigurasi Berkas Sistem
-ADMIN_PASSWORD = "adminpolban"
+# ═══════════════ KONFIGURASI ═══════════════
 LOG_FILE = os.path.join(os.path.dirname(__file__), "activity.log")
 
-# Membuat file dummy data_manager jika belum ada di direktori kerja
-try:
-    import data_manager
-except ImportError:
-    # Blok kode pengaman sbg representasi module data_manager dummy jika belum lengkap
-    class DummyDataManager:
-        def write_local_data(self, data):
-            with open("data_promo_local.json", "w") as f:
-                json.dump(data, f)
-        def read_local_data(self):
-            if os.path.exists("data_promo_local.json"):
-                with open("data_promo_local.json", "r") as f: return json.load(f)
-            return []
-        def push_promo_to_cloud(self, data):
-            return True # Simulasi push sukses
-    data_manager = DummyDataManager()
 
+# ═══════════════ FUNGSI PEMBANTU ═══════════════
 def tulis_log(pesan):
-    """Menulis rekaman jejak aktivitas ke dalam berkas log lokal."""
+    """Menulis pesan ke activity.log dan mengembalikan string untuk Log Viewer."""
     waktu = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     baris = f"[{waktu}] {pesan}\n"
-    with open(LOG_FILE, "a", encoding="utf-8") as f:
-        f.write(baris)
+    try:
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(baris)
+    except:
+        pass
     return baris
 
-# ========================================================
-# CORE OPERASIONAL LOGIC (BACKGROUND THREADS)
-# ========================================================
 
+# ═══════════════ FUNGSI UTAMA ═══════════════
 def jalankan_sinkronisasi(progress_bar, log_widget, root):
-    """Proses penarikan data dari core scraper engine secara asinkron."""
+    """Menjalankan scraping di background thread, memperbarui progress bar."""
     try:
         import scraper
-        
 
-        log_widget.insert(tk.END, tulis_log('[SCRAPING] Memulai proses sinkronisasi data dari web...'))
+        # Tahap 1: Mulai
+        log_widget.insert(tk.END, tulis_log("[SCRAPING] Memulai sinkronisasi data..."))
         log_widget.see(tk.END)
         progress_bar["value"] = 10
         root.update_idletasks()
-        
 
+        # Tahap 2: Jalankan scraper
         data_mentah, errors = scraper.run_scraper()
+        
+        if errors:
+            for err in errors:
+                log_widget.insert(tk.END, tulis_log(f"[SCRAPING] ⚠️ {err}"))
         progress_bar["value"] = 50
         root.update_idletasks()
-        
 
-        if errors:
-            log_widget.insert(tk.END, tulis_log(f'[WARN] {len(errors)} retailer terganggu selama scraping.'))
-            for err in errors:
-                log_widget.insert(tk.END, tulis_log(f'   -> Error Log: {err}'))
-            log_widget.see(tk.END)
-
-
+        # Tahap 3: Fallback jika scraping gagal
         if not data_mentah:
-            log_widget.insert(tk.END, tulis_log('[SCRAPING] Kegagalan sistem terdeteksi. Mengaktifkan data demo...'))
+            log_widget.insert(tk.END, tulis_log("[SCRAPING] ⚠️ Scraping gagal. Menggunakan data demo..."))
             log_widget.see(tk.END)
             data_mentah = scraper.get_demo_data()
-            
+
+            if not data_mentah:
+                log_widget.insert(tk.END, tulis_log("[ERROR] Data demo juga kosong! Sinkronisasi dibatalkan."))
+                log_widget.see(tk.END)
+                messagebox.showerror("Error", "Scraping dan data demo sama-sama gagal.\nPeriksa koneksi internet.")
+                progress_bar["value"] = 0
+                return
+
         progress_bar["value"] = 80
         root.update_idletasks()
-        
 
+        # Tahap 4: Perkaya data dengan Address Book, lalu simpan
+        import data_manager
+        if data_mentah:
+            data_mentah = data_manager.enrich_data(data_mentah)
         data_manager.write_local_data(data_mentah)
-        
         progress_bar["value"] = 100
         root.update_idletasks()
-        
-        log_widget.insert(tk.END, tulis_log(f'[SCRAPING] Sukses! {len(data_mentah)} item diperbarui secara lokal.'))
+
+        log_widget.insert(tk.END, tulis_log(f"[SCRAPING] ✅ Sinkronisasi selesai. {len(data_mentah)} item diperbarui."))
         log_widget.see(tk.END)
-        messagebox.showinfo('Sukses', f'Sinkronisasi selesai!\n{len(data_mentah)} item berhasil diperbarui.')
-        
+        messagebox.showinfo("Sukses", f"Sinkronisasi selesai!\n{len(data_mentah)} item berhasil diperbarui.")
+
+    except ImportError as e:
+        log_widget.insert(tk.END, tulis_log(f"[ERROR] Modul tidak ditemukan: {e}"))
+        log_widget.see(tk.END)
+        messagebox.showerror("Error", f"Modul tidak ditemukan:\n{e}\nPastikan scraper.py dan data_manager.py ada.")
+        progress_bar["value"] = 0
     except Exception as e:
-        log_widget.insert(tk.END, tulis_log(f'[ERROR] Gangguan Sinkronisasi: {str(e)}'))
+        log_widget.insert(tk.END, tulis_log(f"[ERROR] Sinkronisasi gagal: {e}"))
         log_widget.see(tk.END)
-        messagebox.showerror('Error Fatal', f'Sinkronisasi terhenti total:\n{e}')
-    finally:
+        messagebox.showerror("Error", f"Terjadi kesalahan:\n{e}")
         progress_bar["value"] = 0
 
+
 def mulai_sinkronisasi(progress_bar, log_widget, root):
-    """Membungkus fungsi sinkronisasi ke dalam Thread terpisah supaya GUI tidak freeze."""
+    """Membungkus sinkronisasi dalam thread agar GUI tidak freeze."""
     thread = threading.Thread(
         target=jalankan_sinkronisasi,
         args=(progress_bar, log_widget, root),
@@ -95,46 +98,54 @@ def mulai_sinkronisasi(progress_bar, log_widget, root):
     )
     thread.start()
 
+
 def jalankan_upload(progress_bar, log_widget, root):
-    """Proses transmisi data lokal menuju penyimpanan awan secara asinkron."""
+    """Mengunggah data promo ke Google Sheets."""
     try:
-        log_widget.insert(tk.END, tulis_log('[UPLOAD] Menginisiasi pengiriman data cloud...'))
+        import data_manager
+
+        log_widget.insert(tk.END, tulis_log("[UPLOAD] Memulai upload ke cloud... (Ini memakan waktu, harap tunggu)"))
         log_widget.see(tk.END)
         progress_bar["value"] = 20
         root.update_idletasks()
-        
+
         data = data_manager.read_local_data()
         if not data:
-            log_widget.insert(tk.END, tulis_log('[UPLOAD] Pembatalan otomatis: Data lokal kosong.'))
+            log_widget.insert(tk.END, tulis_log("[UPLOAD] Tidak ada data untuk diupload."))
             log_widget.see(tk.END)
-            messagebox.showwarning('Peringatan', 'Tidak ditemukan data lokal untuk diunggah.\nSilakan jalankan sinkronisasi terdepan.')
+            messagebox.showwarning("Peringatan", "Tidak ada data lokal.\nLakukan sinkronisasi terlebih dahulu.")
             progress_bar["value"] = 0
             return
-            
+
         progress_bar["value"] = 50
         root.update_idletasks()
-        
 
         berhasil = data_manager.push_promo_to_cloud(data)
-        
         progress_bar["value"] = 100
         root.update_idletasks()
-        
+
         if berhasil:
-            log_widget.insert(tk.END, tulis_log(f'[UPLOAD] Sinkronisasi Cloud Sukses. {len(data)} item terunggah.'))
-            messagebox.showinfo('Sukses Cloud', f'{len(data)} item berhasil diupload ke Google Sheets Database.')
+            log_widget.insert(tk.END, tulis_log(f"[UPLOAD] ✅ Upload berhasil. {len(data)} item terkirim ke cloud."))
+            log_widget.see(tk.END)
+            messagebox.showinfo("Sukses", f"Upload berhasil!\n{len(data)} item terkirim ke Google Sheets.")
         else:
-            log_widget.insert(tk.END, tulis_log('[UPLOAD] Transmisi ditolak. Masalah jaringan/cloud script.'))
-            messagebox.showerror('Error Jaringan', 'Gagal mengupload ke cloud database. Silakan cek koneksi internet.')
-            
+            log_widget.insert(tk.END, tulis_log("[UPLOAD] ❌ Upload gagal. Periksa koneksi internet atau Timeout."))
+            log_widget.see(tk.END)
+            messagebox.showerror("Error", "Upload gagal. Periksa koneksi internet atau URL Apps Script (kemungkinan Timeout).")
+
+    except ImportError as e:
+        log_widget.insert(tk.END, tulis_log(f"[ERROR] Modul tidak ditemukan: {e}"))
+        log_widget.see(tk.END)
+        messagebox.showerror("Error", f"Modul tidak ditemukan:\n{e}")
+        progress_bar["value"] = 0
     except Exception as e:
-        log_widget.insert(tk.END, tulis_log(f'[ERROR] Gagal mengunggah data: {str(e)}'))
-        messagebox.showerror('Error Upload', f'Proses upload dibatalkan:\n{e}')
-    finally:
+        log_widget.insert(tk.END, tulis_log(f"[ERROR] Upload gagal: {e}"))
+        log_widget.see(tk.END)
+        messagebox.showerror("Error", f"Terjadi kesalahan:\n{e}")
         progress_bar["value"] = 0
 
-def mulai_upload(progress_bar, log_widget, root):
-    """Membungkus fungsi transmisi ke Thread terpisah."""
+def upload_ke_cloud(progress_bar, log_widget, root):
+    """Membungkus upload dalam thread agar GUI tidak freeze."""
     thread = threading.Thread(
         target=jalankan_upload,
         args=(progress_bar, log_widget, root),
@@ -142,73 +153,193 @@ def mulai_upload(progress_bar, log_widget, root):
     )
     thread.start()
 
-def segarkan_log_viewer(log_widget):
-    """Membaca ulang isi berkas activity.log ke widget teks GUI."""
-    log_widget.delete('1.0', tk.END)
+
+# ═══════════════ MEMBANGUN GUI ═══════════════
+def buat_window(parent=None):
+    """Membuat jendela Dashboard Admin."""
+
+    root = tk.Toplevel(parent) if parent else tk.Tk()
+    root.title("Radar Promo Admin Dashboard")
+    root.geometry("680x520")
+    root.resizable(True, True)
+    root.configure(bg="#f5f5f7")
+
+    # Judul
+    header = tk.Label(
+        root,
+        text="🛠️ Radar Promo Admin Dashboard",
+        font=("Arial", 18, "bold"),
+        bg="#f5f5f7",
+        fg="#6F84B8"
+    )
+    header.pack(pady=(20, 10))
+
+    sub_header = tk.Label(
+        root,
+        text="Alat pemeliharaan data promo dan pemantauan aktivitas",
+        font=("Arial", 11),
+        bg="#f5f5f7",
+        fg="#6b7280"
+    )
+    sub_header.pack(pady=(0, 20))
+
+    # Frame Sinkronisasi
+    sync_frame = tk.Frame(root, bg="#ffffff", highlightbackground="#e5e7eb", highlightthickness=1)
+    sync_frame.pack(fill="x", padx=30, pady=(0, 10))
+
+    tk.Label(
+        sync_frame,
+        text="📥 Sinkronisasi Data",
+        font=("Arial", 13, "bold"),
+        bg="#ffffff",
+        fg="#111827"
+    ).pack(anchor="w", padx=20, pady=(15, 5))
+
+    tk.Label(
+        sync_frame,
+        text="Ambil data promo terbaru dari hemat.id dan simpan ke database lokal.",
+        font=("Arial", 10),
+        bg="#ffffff",
+        fg="#6b7280"
+    ).pack(anchor="w", padx=20, pady=(0, 10))
+
+    progress_bar = ttk.Progressbar(
+        sync_frame,
+        orient="horizontal",
+        length=400,
+        mode="determinate",
+        maximum=100
+    )
+    progress_bar.pack(padx=20, pady=(5, 10))
+
+    sync_btn = tk.Button(
+        sync_frame,
+        text="🔄 Sinkronisasi Sekarang",
+        font=("Arial", 12, "bold"),
+        bg="#6F84B8",
+        fg="white",
+        activebackground="#5a72a8",
+        activeforeground="white",
+        relief="flat",
+        bd=0,
+        padx=20,
+        pady=8,
+        cursor="hand2",
+        command=lambda: mulai_sinkronisasi(progress_bar, log_widget, root)
+    )
+    sync_btn.pack(pady=(0, 15))
+
+    # Frame Upload
+    upload_frame = tk.Frame(root, bg="#ffffff", highlightbackground="#e5e7eb", highlightthickness=1)
+    upload_frame.pack(fill="x", padx=30, pady=(0, 10))
+
+    tk.Label(
+        upload_frame,
+        text="☁️ Upload ke Cloud",
+        font=("Arial", 13, "bold"),
+        bg="#ffffff",
+        fg="#111827"
+    ).pack(anchor="w", padx=20, pady=(15, 5))
+
+    tk.Label(
+        upload_frame,
+        text="Kirim data yang sudah di-sinkronisasi ke Google Sheets (database ).",
+        font=("Arial", 10),
+        bg="#ffffff",
+        fg="#6b7280"
+    ).pack(anchor="w", padx=20, pady=(0, 15))
+
+    upload_btn = tk.Button(
+        upload_frame,
+        text="☁️ Upload Promo ke Cloud",
+        font=("Arial", 12, "bold"),
+        bg="#F1C0CC",
+        fg="white",
+        activebackground="#e8aabb",
+        activeforeground="white",
+        relief="flat",
+        bd=0,
+        padx=20,
+        pady=8,
+        cursor="hand2",
+        command=lambda: upload_ke_cloud(progress_bar, log_widget, root)
+    )
+    upload_btn.pack(pady=(0, 15))
+
+    # Frame Log Viewer
+    log_frame = tk.Frame(root, bg="#ffffff", highlightbackground="#e5e7eb", highlightthickness=1)
+    log_frame.pack(fill="both", expand=True, padx=30, pady=(0, 20))
+
+    tk.Label(
+        log_frame,
+        text="📋 Log Aktivitas",
+        font=("Arial", 13, "bold"),
+        bg="#ffffff",
+        fg="#111827"
+    ).pack(anchor="w", padx=20, pady=(15, 5))
+
+    log_widget = scrolledtext.ScrolledText(
+        log_frame,
+        wrap=tk.WORD,
+        width=70,
+        height=12,
+        font=("Consolas", 9),
+        bg="#f5f4f2",
+        fg="#111827",
+        relief="flat",
+        bd=0,
+        padx=10,
+        pady=10
+    )
+    log_widget.pack(fill="both", expand=True, padx=20, pady=(0, 5))
+
+    refresh_btn = tk.Button(
+        log_frame,
+        text="🔄 Refresh Log",
+        font=("Arial", 10),
+        bg="#eef1f8",
+        fg="#374151",
+        activebackground="#d1d5db",
+        activeforeground="#374151",
+        relief="flat",
+        bd=0,
+        padx=14,
+        pady=4,
+        cursor="hand2",
+        command=lambda: muat_ulang_log(log_widget)
+    )
+    refresh_btn.pack(pady=(0, 10))
+
+    # Muat log yang sudah ada
+    muat_ulang_log(log_widget)
+
+    if not parent:
+        root.mainloop()
+
+    return root
+
+
+def muat_ulang_log(log_widget):
+    """Membaca isi activity.log dan menampilkannya di Log Viewer."""
+    log_widget.delete(1.0, tk.END)
     if os.path.exists(LOG_FILE):
         with open(LOG_FILE, "r", encoding="utf-8") as f:
-            log_widget.insert(tk.END, f.read())
+            isi = f.read()
+        if isi.strip():
+            log_widget.insert(tk.END, isi)
+            log_widget.see(tk.END)
+        else:
+            log_widget.insert(tk.END, "[INFO] File log kosong. Aktivitas akan muncul di sini.\n")
     else:
-        log_widget.insert(tk.END, "Log aktivitas kosong.\n")
-    log_widget.see(tk.END)
+        log_widget.insert(tk.END, "[INFO] File log belum ada. Aktivitas akan muncul di sini.\n")
 
 
-
+# ═══════════════ FUNGSI UNTUK DIPANGGIL OLEH MAIN.PY ═══════════════
 def run_dashboard(parent=None):
-    root = tk.Toplevel(parent) if parent else tk.Tk()
-    root.title("Radar Promo Admin Dashboard v2.0")
-    root.geometry("680x560")
-    root.configure(bg="#F3F4F6")
-    
+    """Fungsi yang akan dipanggil oleh main.py saat Admin login."""
+    return buat_window(parent)
 
-    tk.Label(root, text='🛠️ Radar Promo Admin Dashboard',
-             font=('Arial', 18, 'bold'), bg='#F3F4F6', fg='#1E3A8A').pack(pady=(15, 5))
-    tk.Label(root, text='Modul Pengelolaan Data Otomatis & Pemantauan Log',
-             font=('Arial', 10), bg='#F3F4F6', fg='#4B5563').pack(pady=(0, 15))
-    
 
-    main_frame = tk.Frame(root, bg='#FFFFFF', bd=1, relief='solid', highlightthickness=0)
-    main_frame.pack(fill='x', padx=25, pady=5)
-    
-
-    tk.Label(main_frame, text='Status Jalur Proses Antrean Pemeliharaan Data:', font=('Arial', 9), bg='#FFFFFF', fg='#374151').pack(anchor='w', padx=20, pady=(10, 2))
-    progress_bar = ttk.Progressbar(main_frame, orient='horizontal', length=580, mode='determinate')
-    progress_bar.pack(padx=20, pady=(0, 15))
-    
-
-    panel_tombol = tk.Frame(main_frame, bg='#FFFFFF')
-    panel_tombol.pack(fill='x', padx=20, pady=(0, 10))
-    
-    btn_sync = tk.Button(panel_tombol, text='🔄 Sinkronisasi Web', font=('Arial', 11, 'bold'),
-                         bg='#2563EB', fg='white', relief='flat', cursor='hand2', width=18, height=2,
-                         command=lambda: mulai_sinkronisasi(progress_bar, log_widget, root))
-    btn_sync.pack(side='left', padx=(0, 10))
-    
-    btn_upload = tk.Button(panel_tombol, text='☁️ Upload ke Cloud', font=('Arial', 11, 'bold'),
-                           bg='#059669', fg='white', relief='flat', cursor='hand2', width=18, height=2,
-                           command=lambda: mulai_upload(progress_bar, log_widget, root))
-    btn_upload.pack(side='left', padx=10)
-    
-    btn_refresh_log = tk.Button(panel_tombol, text='📋 Refresh Log', font=('Arial', 11, 'bold'),
-                                 bg='#4B5563', fg='white', relief='flat', cursor='hand2', width=14, height=2,
-                                 command=lambda: segarkan_log_viewer(log_widget))
-    btn_refresh_log.pack(side='right')
-
-  
-    log_frame = tk.Frame(root, bg='#F3F4F6')
-    log_frame.pack(fill='both', expand=True, padx=25, pady=10)
-    
-    tk.Label(log_frame, text='Aktivitas Konsol Log (Activity Log Viewer):', font=('Arial', 10, 'bold'), bg='#F3F4F6', fg='#1F2937').pack(anchor='w', pady=(0, 5))
-    
-    log_widget = scrolledtext.ScrolledText(log_frame, height=12, font=('Consolas', 9.5), bg='#1F2937', fg='#10B981', insertbackground='white')
-    log_widget.pack(fill='both', expand=True)
-    
-  
-    segarkan_log_viewer(log_widget)
-    tulis_log("[SYSTEM] Sesi konsol dasbor admin berhasil dibuka.")
-    log_widget.insert(tk.END, f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] [SYSTEM] Dasbor Admin Siap Digunakan.\n")
-    
-    root.mainloop()
-
+# ═══════════════ ENTRY POINT (UNTUK PENGUJIAN MANDIRI) ═══════════════
 if __name__ == "__main__":
-    run_dashboard()
+    buat_window()

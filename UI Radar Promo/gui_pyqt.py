@@ -2363,3 +2363,933 @@ class SearchWorker(QThread):
             print(f"SearchWorker error: {e}")
             self.finishedSignal.emit([])
 
+class TileInterceptor(QWebEngineUrlRequestInterceptor):
+    def __init__(self):
+        super().__init__()
+        self._attempted = False
+    def interceptRequest(self, info):
+        url = info.requestUrl().toString()
+        is_tile = "tile.openstreetmap" in url or "tile.openstreetmap.fr" in url
+        if is_tile:
+            info.setHttpHeader(b"Referer", b"https://radarpromo.local/")
+            info.setHttpHeader(b"User-Agent", b"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+            info.setHttpHeader(b"Accept-Language", b"en-US,en;q=0.9")
+            print(f"[TileInterceptor] TILE INJECTED: {url[:80]}")
+        else:
+            print(f"[TileInterceptor] {info.requestMethod()} {url[:80]}")
+
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Radar Promo")
+        self.resize(1280, 820)
+        self.setMinimumSize(1000, 640)
+        
+        self.is_dark = False
+        self.t = LIGHT
+        self.selected_cat = "Semua"
+        self.selected_area = "Semua Area"
+        self._filter_promo = False
+        self.sort_opt = "termurah"
+        self.cart_items = []
+        self.selected_brands = []
+        self._search_thread = None
+        self._search_worker = None
+        self.search_q = ""
+        self.last_sync = datetime.now()
+        self._data_cache = {"data": None, "timestamp": 0, "ttl_ms": 30000}
+        
+        self._all_prods = []
+        self._visible_count = 0
+        self._admin_login_callback = None
+        self._profile = QWebEngineProfile.defaultProfile()
+        self._interceptor = TileInterceptor()
+        self._profile.setUrlRequestInterceptor(self._interceptor)
+        self._build()
+        self._apply_theme()
+        self.update_balance_display()
+        self._reload_products()
+        self._update_sync_lbl()
+        self.change_global_font_size(self.setting_page.font_size)
+
+    # ── BUILD ─────────────────────────────────────────────────────────────────
+
+    def _build(self):
+        root = QWidget()
+        self.setCentralWidget(root)
+        self._root_lay = QVBoxLayout(root)
+        self._root_lay.setContentsMargins(0, 0, 0, 0)
+        self._root_lay.setSpacing(0)
+        
+        self._build_navbar()
+        
+        # Content stack
+        self.stack = QStackedWidget()
+        self._root_lay.addWidget(self.stack, stretch=1)
+        
+        # Page 0: Home
+        self.home_w = QWidget()
+        hl = QVBoxLayout(self.home_w)
+        hl.setContentsMargins(0, 0, 0, 0)
+        hl.setSpacing(0)
+        self.banner = BannerWidget(self.t)
+        hl.addWidget(self.banner)
+        self._build_filter_bar(hl)
+        
+        self.prod_list = QListWidget()
+        self.prod_list.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        self.prod_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.prod_list.setSpacing(0)
+        self.prod_list.setGridSize(QSize(238, 378))
+        self.prod_list.setUniformItemSizes(True)
+        self.prod_list.setFlow(QListWidget.Flow.LeftToRight)
+        self.prod_list.setWrapping(True)
+        self.prod_list.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.prod_list.setStyleSheet(f"background:{self.t['bg']};border:none;")
+        self.prod_list.itemClicked.connect(self._on_prod_item_clicked)
+
+        self._list_container = QWidget()
+        _list_lay = QVBoxLayout(self._list_container)
+        _list_lay.setContentsMargins(36, 24, 36, 24)
+        _list_lay.setSpacing(0)
+        _list_lay.addWidget(self.prod_list)
+        self._load_more_btn = QPushButton("Muat Lebih Banyak")
+        self._load_more_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._load_more_btn.setStyleSheet("QPushButton{background:#6FB8AD;color:white;border:none;border-radius:12px;padding:12px 24px;font-size:13px;font-weight:bold;}QPushButton:hover{background:#3D9797;}")
+        self._load_more_btn.hide()
+        self._load_more_btn.clicked.connect(self._load_more_products)
+        _list_lay.addWidget(self._load_more_btn)
+        hl.addWidget(self._list_container)
+        self.stack.addWidget(self.home_w)       # idx 0
+
+        # Toast (before LokasiPage needs it)
+        self.toast = Toast(root)
+
+        # Page 1: Lokasi
+        self.lokasi_page = LokasiPage(self.t, toast=self.toast)
+        self.stack.addWidget(self.lokasi_page)  # idx 1
+        
+        # Page 2: Statistik
+        self.stat_page = StatistikPage(self.t, app=self)
+        self.stack.addWidget(self.stat_page)    # idx 2
+        
+        # Page 3: Pengaturan
+        self.setting_page = PengaturanPage(self, self.t)
+        self.stack.addWidget(self.setting_page) # idx 3
+        
+        # Page 4: Cart (built dynamically)
+        self.stack.addWidget(QWidget())          # idx 4
+
+        # Bottom navbar
+        self._build_bottom_nav()
+
+    def _build_navbar(self):
+        self.navbar = QFrame()
+        self.navbar.setObjectName("navbar")
+        self.navbar.setFixedHeight(64)
+        nl = QHBoxLayout(self.navbar)
+        nl.setContentsMargins(28, 0, 28, 0)
+        nl.setSpacing(16)
+        
+        # Logo - RP text
+        self.logo_btn = QPushButton()
+        self.logo_btn.setFlat(True)
+        self.logo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.logo_btn.setFixedSize(52, 52)
+        self.logo_btn.setStyleSheet("background:transparent;border:none;padding:0;")
+        self.logo_btn.clicked.connect(lambda: self._switch_page(0))
+
+        self.logo_img = QLabel()
+        self.logo_img.setFixedSize(48, 48)
+        self.logo_img.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.logo_img.setScaledContents(True)
+        logo_px = QPixmap("UI/Home/Assets/Logo_Aplikasi.png")
+        if not logo_px.isNull():
+            self.logo_img.setPixmap(logo_px)
+        else:
+            self.logo_img.setScaledContents(False)
+            self.logo_img.setText("RP")
+            self.logo_img.setFont(QFont("Arial", 18, QFont.Weight.Bold))
+        self.logo_img.setStyleSheet("background:transparent;")
+
+        self.logo_btn_layout = QHBoxLayout(self.logo_btn)
+        self.logo_btn_layout.setContentsMargins(0, 0, 0, 0)
+        self.logo_btn_layout.setSpacing(0)
+        self.logo_btn_layout.addWidget(self.logo_img)
+        nl.addWidget(self.logo_btn)
+
+        # Search bar - centered, stretch to fill
+        search_container = QWidget()
+        s_lay = QHBoxLayout(search_container)
+        s_lay.setContentsMargins(0, 0, 0, 0)
+        s_lay.setSpacing(8)
+        self.search = QLineEdit()
+        self.search.setPlaceholderText("Cari Promo")
+        self.search.setFont(QFont("Arial", 12))
+        self.search.setFixedHeight(42)
+        self.search.setStyleSheet(f"""
+            QLineEdit {{
+                background: {self.t['search_bg']};
+                border: none;
+                border-radius: 21px;
+                padding: 0 20px;
+                color: {self.t['search_fg']};
+            }}
+            QLineEdit::placeholder {{
+                color: {self.t['text2']};
+            }}
+        """)
+        self.search.textChanged.connect(self._on_search)
+        s_lay.addWidget(self.search)
+        nl.addWidget(search_container, stretch=0)
+
+        self.budget_capsule = QWidget()
+        self.budget_capsule.setFixedHeight(44)
+        self.budget_capsule.setStyleSheet(f"background:{self.t['budget_bg']};border:1px solid #D1D5DB;border-radius:22px;padding:0 16px;")
+        bc_lay = QHBoxLayout(self.budget_capsule)
+        bc_lay.setContentsMargins(16, 0, 16, 0)
+        bc_lay.setSpacing(8)
+        bc_lay.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+
+        budget_lbl = QLabel("Sisa Saldo :")
+        budget_lbl.setFont(QFont("Arial", 10))
+        budget_lbl.setStyleSheet(f"color:{self.t['text1']};background:transparent;")
+        bc_lay.addWidget(budget_lbl)
+
+        self.budget_line = QFrame()
+        self.budget_line.setFrameShape(QFrame.Shape.HLine)
+        self.budget_line.setFixedWidth(80)
+        self.budget_line.setFixedHeight(4)
+        self.budget_line.setStyleSheet(f"background:{self.t['price_fg']};border:none;border-radius:2px;")
+        bc_lay.addWidget(self.budget_line)
+
+        self.budget_val = QLabel("Rp 250k")
+        self.budget_val.setFont(QFont("Arial", 11, QFont.Weight.Bold))
+        self.budget_val.setStyleSheet(f"color:{self.t['price_fg']};background:transparent;")
+        bc_lay.addWidget(self.budget_val)
+
+        nl.addWidget(self.budget_capsule)
+        cw = QWidget()
+        cw.setStyleSheet("background:transparent;")
+        cwl = QHBoxLayout(cw)
+        cwl.setContentsMargins(0, 0, 0, 0)
+        cwl.setSpacing(4)
+
+        self.cart_btn = QPushButton()
+        self.cart_btn.setFlat(True)
+        self.cart_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.cart_btn.setStyleSheet("background:transparent;border:none;")
+        self.cart_btn.clicked.connect(self._show_cart)
+
+        cart_lay = QHBoxLayout(self.cart_btn)
+        cart_lay.setContentsMargins(8, 8, 8, 8)
+        cart_lay.setSpacing(6)
+
+        cart_icon = QLabel()
+        cart_icon.setFixedSize(32, 32)
+        cart_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        px = QPixmap("UI/Home/Assets/Shopping cart (1).png")
+        if not px.isNull():
+            cart_icon.setPixmap(px.scaled(32, 32, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+        else:
+            cart_icon.setText("🛒")
+            cart_icon.setFont(QFont("Arial", 18))
+        cart_icon.setStyleSheet("background:transparent;")
+        cart_lay.addWidget(cart_icon)
+
+        self.badge_lbl = QLabel()
+        self.badge_lbl.setFixedSize(20, 20)
+        self.badge_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.badge_lbl.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+        self.badge_lbl.setStyleSheet(f"background:{self.t['price_fg']};color:white;border-radius:10px;")
+        self.badge_lbl.hide()
+
+        cwl.addWidget(self.cart_btn)
+        cwl.addWidget(self.badge_lbl)
+        nl.addWidget(cw)
+
+        # Dark btn
+        self.dark_btn = QPushButton("⏾")
+        self.dark_btn.setFixedSize(42, 42)
+        self.dark_btn.setFont(QFont("Arial", 17))
+        self.dark_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.dark_btn.clicked.connect(self._toggle_dark)
+        nl.addWidget(self.dark_btn)
+        
+        self._root_lay.addWidget(self.navbar)
+        self.nav_line = QFrame()
+        self.nav_line.setFixedHeight(1)
+        self._root_lay.addWidget(self.nav_line)
+
+    def _build_filter_bar(self, parent_lay):
+        self.filter_frame = QFrame()
+        self.filter_frame.setObjectName("filterBar")
+        self.filter_frame.setFixedHeight(100)
+        fl = QVBoxLayout(self.filter_frame)
+        fl.setContentsMargins(28, 8, 28, 8)
+        fl.setSpacing(8)
+
+        cats_row = QHBoxLayout()
+        cats_row.setSpacing(8)
+
+        self.cat_btns = {}
+        for cat in CATEGORIES:
+            display = CAT_EMOJI.get(cat, cat)
+            btn = PillBtn(display, cat == self.selected_cat, self.t)
+            btn.clicked.connect(lambda _, c=cat: self._select_cat(c))
+            self.cat_btns[cat] = btn
+            cats_row.addWidget(btn)
+
+        cats_row.addStretch()
+        fl.addLayout(cats_row)
+
+        promo_row = QHBoxLayout()
+        promo_row.setSpacing(8)
+
+        self.promo_toggle = PillBtn("🔥 Promo", False, self.t)
+        self.promo_toggle.clicked.connect(self._toggle_promo_filter)
+        promo_row.addWidget(self.promo_toggle)
+
+        promo_row.addStretch()
+        fl.addLayout(promo_row)
+
+        self.filter_btn = QPushButton()
+        filter_px = QPixmap("UI/Home/Assets/Filter.png")
+        if not filter_px.isNull():
+            from PyQt6.QtGui import QIcon
+            filter_px = filter_px.scaled(18, 18, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            self.filter_btn.setIcon(QIcon(filter_px))
+        self.filter_btn.setText(" Filter")
+        self.filter_btn.setFixedHeight(36)
+        self.filter_btn.setFont(QFont("Arial", 11, QFont.Weight.Medium))
+        self.filter_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.filter_btn.clicked.connect(self._show_filter_dialog)
+        self.filter_btn.setStyleSheet(f"QPushButton{{background:{self.t['pill_on_bg']};color:white;border:1px solid {self.t['price_fg']};border-radius:18px;padding:0 20px;}}QPushButton:hover{{background:#1fa072;}}")
+        promo_row.addWidget(self.filter_btn)
+
+        parent_lay.addWidget(self.filter_frame)
+        self.filter_line = QFrame()
+        self.filter_line.setFixedHeight(1)
+        parent_lay.addWidget(self.filter_line)
+
+    def _build_bottom_nav(self):
+        self.bottom_nav = QFrame()
+        self.bottom_nav.setObjectName("bottomNav")
+        self.bottom_nav.setFixedHeight(56)
+        drop_shadow(self.bottom_nav, 20, "#00000015", -4)
+        bl = QHBoxLayout(self.bottom_nav)
+        bl.setContentsMargins(40, 0, 40, 0)
+        bl.setSpacing(0)
+        self.nav_tabs = [
+            ("UI/Home/Assets/Home.png", 0),
+            ("UI/Home/Assets/Location.png", 1),
+            ("UI/Home/Assets/Analytics.png", 2),
+            (None, 3),  # settings gear - use emoji
+        ]
+        self.bottom_btns = []
+        for icon_path, idx in self.nav_tabs:
+            btn = QPushButton()
+            btn_lay = QVBoxLayout(btn)
+            btn_lay.setContentsMargins(4, 8, 4, 8)
+            btn_lay.setSpacing(0)
+            ic = QLabel()
+            ic.setFixedSize(28, 28)
+            ic.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            if icon_path:
+                nav_px = QPixmap(icon_path)
+                if not nav_px.isNull():
+                    nav_px = nav_px.scaled(24, 24, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+                    ic.setPixmap(nav_px)
+                else:
+                    ic.setText("•")
+                    ic.setFont(QFont("Arial", 18))
+            else:
+                ic.setText("⚙")
+                ic.setFont(QFont("Arial", 20))
+            ic.setStyleSheet("background:transparent;")
+            btn_lay.addWidget(ic, alignment=Qt.AlignmentFlag.AlignCenter)
+            btn.setFlat(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+            btn.clicked.connect(lambda _, i=idx: self._switch_page(i))
+            self.bottom_btns.append((btn, ic))
+            bl.addWidget(btn)
+        self._root_lay.addWidget(self.bottom_nav)
+
+    # ── NAVIGATION ────────────────────────────────────────────────────────────
+
+    def _switch_page(self, idx):
+        self.stack.setCurrentIndex(idx)
+        self._style_bottom_btns(idx)
+        if idx == 1 and getattr(self, '_map_ready', False):
+            self.web_view.page().runJavaScript("""
+                setTimeout(function(){
+                    if (typeof map !== 'undefined') {
+                        console.log('Invalidating map size, container:', map.getContainer().offsetWidth, 'x', map.getContainer().offsetHeight);
+                        map.invalidateSize(true);
+                        map.invalidateSize(true);
+                    } else {
+                        console.log('map not found');
+                    }
+                }, 300);
+            """)
+
+    def _style_bottom_btns(self, active_idx):
+        t = self.t
+        for i, (btn, ic) in enumerate(self.bottom_btns):
+            is_active = (i == active_idx)
+            if is_active:
+                btn.setStyleSheet("QPushButton{background:#25C79922;border:none;border-radius:12px;}")
+                ic.setStyleSheet(f"background:transparent;color:{t['price_fg']};")
+            else:
+                btn.setStyleSheet(f"QPushButton{{background:transparent;border:none;}}QPushButton:hover{{background:{t['pill_off_bg']}33;border-radius:12px;}}")
+                ic.setStyleSheet(f"background:transparent;color:{t['bottom_fg']};")
+
+    def _show_cart(self):
+        if not hasattr(self, '_cart_page'):
+            self._cart_page = CartPage(self, self.t)
+            self._cart_page.back.connect(lambda: self._switch_page(0))
+        self.stack.removeWidget(self.stack.widget(4))
+        self.stack.insertWidget(4, self._cart_page)
+        self.stack.setCurrentIndex(4)
+        self._style_bottom_btns(-1)
+        self.update_balance_display()
+        if hasattr(self, 'setting_page'):
+            self.change_global_font_size(self.setting_page.font_size)
+
+    # ── PRODUCTS ──────────────────────────────────────────────────────────────
+
+    def _get_products(self):
+        reverse = None if self.sort_opt == "default" else self.sort_opt == "termahal"
+        jenis_harga = "PROMO" if self.selected_cat == "Promo" else None
+
+        now = time.time()
+        cache = self._data_cache
+        if cache["data"] is not None and (now - cache["timestamp"]) * 1000 < cache["ttl_ms"]:
+            raw_records = cache["data"]
+        else:
+            raw_records = data_manager.read_local_data() if data_manager else []
+            cache["data"] = raw_records
+            cache["timestamp"] = now
+
+        # Map scraped data fields to UI expected fields
+        records = []
+        for r in raw_records:
+            harga_normal = r.get("harga_normal") or 0
+            harga_promo = r.get("harga_promo") or 0
+            records.append({
+                "id": r.get("id", ""),
+                "nama_produk": r.get("nama_produk", ""),
+                "name": r.get("nama_produk", ""),
+                "category": r.get("kategori") or "Lainnya",
+                "price": harga_promo,
+                "harga_normal": harga_normal,
+                "harga_promo": harga_promo,
+                "diskon_persen": r.get("diskon_persen") or 0,
+                "store": r.get("nama_cabang", r.get("brand_toko", "")),
+                "area": (r.get("area_tags", [""])[0] if r.get("area_tags") else ""),
+                "distance": "",
+                "image": r.get("image_url", ""),
+                "jenis_harga": r.get("jenis_harga", ""),
+                "search_vector": r.get("search_vector", ""),
+            })
+
+        records = engine.normalize_promo_data(records)
+
+        filtered, _ = engine.run_pipeline(
+            records,
+            area=self.selected_area if self.selected_area != "Semua Area" else None,
+            category=self.selected_cat if self.selected_cat not in ("Semua", "Promo") else None,
+            brand=None,
+            jenis_harga=jenis_harga,
+            keyword=self.search_q if self.search_q.strip() else None,
+            reverse=reverse
+        )
+
+        if self.selected_brands:
+            filtered = engine.filter_by_brand_multi(filtered, self.selected_brands)
+
+        if self._filter_promo:
+            filtered = engine.filter_promo_items(filtered)
+
+        grouped = {}
+        for p in filtered:
+            store_base = p["store"].split()[0]
+            key = (p["name"], store_base, p["price"])
+            if key not in grouped:
+                np = p.copy()
+                np["store_base"] = store_base
+                np["is_promo"] = p.get("jenis_harga") == "PROMO"
+                np["branches"] = [{"store": p["store"], "distance": p["distance"]}]
+                grouped[key] = np
+            else:
+                grouped[key]["branches"].append({"store": p["store"], "distance": p["distance"]})
+
+        return list(grouped.values())
+
+    def _reload_products(self):
+        self._all_prods = self._get_products()
+        self._visible_count = min(50, len(self._all_prods))
+        self._render_visible_products()
+
+    def _render_visible_products(self):
+        self.prod_list.clear()
+        prods = self._all_prods[:self._visible_count]
+        if not prods:
+            self._load_more_btn.hide()
+            if hasattr(self, 'setting_page'):
+                self.change_global_font_size(self.setting_page.font_size)
+            return
+
+        for p in prods:
+            item = QListWidgetItem()
+            item.setSizeHint(QSize(CARD_W, 360))
+            self.prod_list.addItem(item)
+            item_widget = ProductListItem(p, self.t)
+            item_widget.add_clicked.connect(self._add_to_cart)
+            self.prod_list.setItemWidget(item, item_widget)
+
+        total = len(self._all_prods)
+        if self._visible_count < total:
+            remaining = total - self._visible_count
+            self._load_more_btn.setText(f"Muat Lebih Banyak ({remaining} tersisa)")
+            self._load_more_btn.show()
+        else:
+            self._load_more_btn.hide()
+
+        if hasattr(self, 'setting_page'):
+            self.change_global_font_size(self.setting_page.font_size)
+    
+    def _load_more_products(self):
+        prev = self.prod_list.count()
+        self._visible_count += 50
+        prods = self._all_prods[prev:self._visible_count]
+        for p in prods:
+            item = QListWidgetItem()
+            item.setSizeHint(QSize(CARD_W, 360))
+            self.prod_list.addItem(item)
+            item_widget = ProductListItem(p, self.t)
+            item_widget.add_clicked.connect(self._add_to_cart)
+            self.prod_list.setItemWidget(item, item_widget)
+        total = len(self._all_prods)
+        if self._visible_count >= total:
+            self._load_more_btn.hide()
+        else:
+            remaining = total - self._visible_count
+            self._load_more_btn.setText(f"Muat Lebih Banyak ({remaining} tersisa)")
+
+    def _on_prod_item_clicked(self, item):
+        w = self.prod_list.itemWidget(item)
+        if w and hasattr(w, '_show_detail'):
+            w._show_detail()
+
+    def _show_product_detail(self, item_or_product):
+        product = item_or_product
+        if isinstance(item_or_product, QListWidgetItem):
+            w = self.prod_list.itemWidget(item_or_product)
+            if w:
+                product = w.product
+        if isinstance(product, dict) and "name" in product:
+            dlg = QDialog(self)
+            dlg.setWindowTitle(product["name"])
+            dlg.setFixedSize(400, 500)
+            dlg.setStyleSheet(f"background:{self.t['card_bg']};")
+            t = self.t
+            lay = QVBoxLayout(dlg)
+            lay.setContentsMargins(16, 16, 16, 16)
+            lay.setSpacing(12)
+            header = QHBoxLayout()
+            ttl = QLabel("Detail Promo")
+            ttl.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+            ttl.setStyleSheet(f"color:{t['text1']};background:transparent;")
+            close_btn = QPushButton("✕")
+            close_btn.setFixedSize(24, 24)
+            close_btn.setStyleSheet(f"background:transparent;color:{t['text2']};border:none;font-weight:bold;")
+            close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            close_btn.clicked.connect(dlg.close)
+            header.addWidget(ttl); header.addStretch(); header.addWidget(close_btn)
+            lay.addLayout(header)
+            img_lbl = QLabel()
+            img_lbl.setFixedSize(368, 180)
+            img_lbl.setStyleSheet(f"background:{t['card_img_bg']}; border-radius:8px;")
+            img_lbl.setText("🖼️")
+            img_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            diskon = product.get("diskon_persen", 0)
+            if diskon > 0:
+                badge = QLabel("🔥 Promo", img_lbl)
+                badge.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+                badge.setStyleSheet(f"background:{t['promo_badge_bg']};color:{t['promo_badge_fg']};border-radius:6px;padding:4px 10px;min-width:70px;")
+                badge.move(8, 8)
+                badge.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+            lay.addWidget(img_lbl)
+            pname = QLabel(product["name"])
+            pname.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+            pname.setWordWrap(True)
+            pname.setStyleSheet(f"color:{t['text1']};background:transparent;")
+            lay.addWidget(pname)
+            price_row = QHBoxLayout()
+            price_row.setSpacing(8)
+            if diskon > 0:
+                op = QLabel(rp(product.get("harga_normal", product["price"])))
+                f = QFont("Arial", 10); f.setStrikeOut(True); op.setFont(f)
+                op.setStyleSheet(f"color:{t['text2']};background:transparent;")
+                pp = QLabel(rp(product["effective_price"]))
+                pp.setFont(QFont("Arial", 13, QFont.Weight.Bold))
+                pp.setStyleSheet(f"color:{t['price_fg']};background:transparent;")
+                price_row.addWidget(op)
+                price_row.addWidget(pp)
+                dk = QLabel(f"-{diskon:.0f}%")
+                dk.setFont(QFont("Arial", 9, QFont.Weight.Bold))
+                dk.setStyleSheet(f"background:{t['price_fg']};color:white;border-radius:4px;padding:2px 4px;")
+                price_row.addWidget(dk)
+            else:
+                pp = QLabel(rp(product["price"]))
+                pp.setFont(QFont("Arial", 13, QFont.Weight.Bold))
+                pp.setStyleSheet(f"color:{t['price_fg']};background:transparent;")
+                price_row.addWidget(pp)
+            price_row.addStretch()
+            lay.addLayout(price_row)
+            store_lbl = QLabel(f"🏪 {product.get('store_base', product.get('store', ''))}")
+            store_lbl.setFont(QFont("Arial", 10))
+            store_lbl.setStyleSheet(f"color:{t['store_fg']};background:transparent;")
+            lay.addWidget(store_lbl)
+            branches = product.get("branches", [{"store": product.get("store", ""), "distance": product.get("distance", "")}])
+            for b in branches:
+                bw = QFrame()
+                bw.setStyleSheet(f"background:{t['cart_item_bg']};border-radius:8px;")
+                bl = QVBoxLayout(bw)
+                bl.setContentsMargins(12, 8, 12, 8)
+                sn = QLabel(f"🏪 {b['store']}")
+                sn.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+                sn.setStyleSheet(f"color:{t['text1']};background:transparent;")
+                sd = QLabel(f"📍 {b['distance']}")
+                sd.setFont(QFont("Arial", 9))
+                sd.setStyleSheet(f"color:{t['text2']};background:transparent;")
+                bl.addWidget(sn); bl.addWidget(sd)
+                lay.addWidget(bw)
+            lay.addStretch()
+            dlg.exec()
+
+    def _add_to_cart(self, product):
+        pid = product.get("id", "")
+        if not pid:
+            pid = f"{product.get('nama_produk', product.get('name', ''))}_{product.get('store', product.get('brand_toko', 'unknown'))}"
+            product["id"] = pid
+        for ci in self.cart_items:
+            if ci["product"].get("id", "") == pid:
+                ci["quantity"] += 1
+                self.update_badge()
+                self.update_balance_display()
+                self.toast.show_msg("Produk berhasil ditambahkan ke keranjang", self.t)
+                return
+        self.cart_items.append({"product": product, "quantity": 1})
+        self.update_badge()
+        self.update_balance_display()
+        self.toast.show_msg("Produk berhasil ditambahkan ke keranjang", self.t)
+
+    def update_badge(self):
+        total = sum(ci["quantity"] for ci in self.cart_items)
+        if total > 0:
+            self.badge_lbl.setText(str(total))
+            self.badge_lbl.show()
+        else:
+            self.badge_lbl.hide()
+
+    def update_balance_display(self):
+        total = sum(ci["product"].get("effective_price", ci["product"].get("price", 0)) * ci["quantity"] for ci in self.cart_items)
+        remaining = 100000 - total
+        self.budget_val.setText(rp(max(0, remaining)))
+
+    # ── FILTER / SORT ─────────────────────────────────────────────────────────
+
+    def _select_cat(self, cat):
+        print(f"[DEBUG] _select_cat called with cat={cat}, _filter_promo={self._filter_promo}")
+        if self._filter_promo:
+            self._filter_promo = False
+            self.promo_toggle.set_active(False)
+            self.selected_cat = "Semua"
+            for c, btn in self.cat_btns.items():
+                btn.set_active(c == "Semua")
+        else:
+            self.selected_cat = cat
+            for c, btn in self.cat_btns.items():
+                btn.set_active(c == cat)
+        self._reload_products()
+
+    def _toggle_promo_filter(self):
+        print(f"[DEBUG] _toggle_promo_filter called, _filter_promo before toggle={self._filter_promo}")
+        self._filter_promo = not self._filter_promo
+        if self._filter_promo:
+            self._saved_cat = self.selected_cat
+            self.selected_cat = "Semua"
+            for c, btn in self.cat_btns.items():
+                btn.set_active(False)
+        else:
+            self.selected_cat = getattr(self, '_saved_cat', "Semua")
+            for c, btn in self.cat_btns.items():
+                btn.set_active(c == self.selected_cat)
+        self.promo_toggle.set_active(self._filter_promo)
+        print(f"[DEBUG] _toggle_promo_filter finished, _filter_promo={self._filter_promo}, selected_cat={self.selected_cat}")
+        self._reload_products()
+
+    def _on_area_change(self, area):
+        self.selected_area = area
+        self._reload_products()
+
+    def _on_sort_change(self, idx):
+        if idx == 1:
+            self.sort_opt = "termurah"
+        elif idx == 2:
+            self.sort_opt = "termahal"
+        self._reload_products()
+
+    def _show_filter_dialog(self):
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Filter & Urutkan")
+        dlg.setFixedSize(360, 400)
+        dlg.setStyleSheet(f"background:{self.t['setting_card_bg']};")
+        dl = QVBoxLayout(dlg)
+        dl.setContentsMargins(24, 24, 24, 24)
+        dl.setSpacing(16)
+
+        brand_lbl = QLabel("Pilih Supermarket")
+        brand_lbl.setFont(QFont("Arial", 13, QFont.Weight.Bold))
+        brand_lbl.setStyleSheet(f"color:{self.t['text1']};background:transparent;")
+        dl.addWidget(brand_lbl)
+
+        brand_keys = list(data_manager.ADDRESS_BOOK.keys())
+        checkboxes = {}
+        for bk in brand_keys:
+            cb = QCheckBox(bk)
+            cb.setFont(QFont("Arial", 11))
+            cb.setStyleSheet(f"color:{self.t['text1']};background:transparent;")
+            if bk in self.selected_brands:
+                cb.setChecked(True)
+            checkboxes[bk] = cb
+            dl.addWidget(cb)
+
+        sort_lbl = QLabel("Urutkan")
+        sort_lbl.setFont(QFont("Arial", 13, QFont.Weight.Bold))
+        sort_lbl.setStyleSheet(f"color:{self.t['text1']};background:transparent;")
+        dl.addWidget(sort_lbl)
+
+        sort_group = QButtonGroup(dlg)
+        rb_default = QRadioButton("Default")
+        rb_termurah = QRadioButton("Termurah")
+        rb_termahal = QRadioButton("Termahal")
+        for rb in (rb_default, rb_termurah, rb_termahal):
+            rb.setFont(QFont("Arial", 11))
+            rb.setStyleSheet(f"color:{self.t['text1']};background:transparent;")
+            dl.addWidget(rb)
+        sort_group.addButton(rb_default, 0)
+        sort_group.addButton(rb_termurah, 1)
+        sort_group.addButton(rb_termahal, 2)
+
+        if self.sort_opt == "termurah":
+            rb_termurah.setChecked(True)
+        elif self.sort_opt == "termahal":
+            rb_termahal.setChecked(True)
+        else:
+            rb_default.setChecked(True)
+
+        btn_row = QHBoxLayout()
+        reset_btn = QPushButton("Reset")
+        reset_btn.setFixedSize(100, 40)
+        reset_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        reset_btn.setStyleSheet(f"QPushButton{{background:{self.t['btn_bg']};color:{self.t['text1']};border:1px solid {self.t['nav_border']};border-radius:12px;font-weight:bold;}}QPushButton:hover{{background:{self.t['cart_item_bg']};}}")
+        reset_btn.clicked.connect(lambda: self._reset_filter(checkboxes, rb_default))
+        btn_row.addWidget(reset_btn)
+
+        btn_row.addStretch()
+
+        apply_btn = QPushButton("Terapkan")
+        apply_btn.setFixedSize(120, 40)
+        apply_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        apply_btn.setStyleSheet(f"QPushButton{{background:{self.t['price_fg']};color:white;border:none;border-radius:12px;font-weight:bold;}}QPushButton:hover{{background:{self.t['banner_from']};}}")
+        apply_btn.clicked.connect(lambda: self._apply_filter(dlg, checkboxes, sort_group))
+        btn_row.addWidget(apply_btn)
+        dl.addLayout(btn_row)
+        dlg.exec()
+
+    def _reset_filter(self, checkboxes, rb_default):
+        for cb in checkboxes.values():
+            cb.setChecked(False)
+        rb_default.setChecked(True)
+
+    def _apply_filter(self, dlg, checkboxes, sort_group):
+        self.selected_brands = [bk for bk, cb in checkboxes.items() if cb.isChecked()]
+        sid = sort_group.checkedId()
+        if sid == 1:
+            self.sort_opt = "termurah"
+        elif sid == 2:
+            self.sort_opt = "termahal"
+        else:
+            self.sort_opt = "default"
+        dlg.accept()
+        self._reload_products()
+
+    def _on_search(self, text):
+        self.search_q = text
+        if self._search_thread and self._search_thread.isRunning():
+            old = self._search_worker
+            if old:
+                old.requestInterruption()
+            self._search_thread.quit()
+            # Wait up to 3 seconds, no terminate() as first choice
+            if not self._search_thread.wait(3000):
+                # Forceful termination as last resort only
+                self._search_thread.terminate()
+                self._search_thread.wait()
+        self._search_worker = SearchWorker(text, self.selected_cat, parent=self)
+        self._search_worker.finishedSignal.connect(self._on_search_done)
+        self._search_thread = self._search_worker
+        self._search_thread.start()
+
+    @pyqtSlot(list)
+    def _on_search_done(self, results):
+        # Guard: ensure this callback is still valid (worker wasn't interrupted/replaced)
+        if not self._search_worker or not hasattr(self._search_worker, 'results'):
+            return
+        try:
+            self._all_prods = results if results else []
+            self._visible_count = 0
+            self._render_visible_products()
+        except Exception as e:
+            print(f"_on_search_done error: {e}")
+        finally:
+            self._search_worker = None
+            self._search_thread = None
+
+    # ── SYNC / DARK / SETTINGS ────────────────────────────────────────────────
+
+    def _sync(self):
+        if hasattr(self, 'refresh_btn') and self.refresh_btn:
+            self.refresh_btn.setEnabled(False)
+            self.refresh_btn.setText("⏳")
+
+        def do_sync():
+            try:
+                data_manager.sync_from_cloud()
+                success = True
+            except Exception:
+                success = False
+
+            def update_ui():
+                if hasattr(self, 'refresh_btn') and self.refresh_btn:
+                    self.refresh_btn.setEnabled(True)
+                    self.refresh_btn.setText("↻")
+
+                if success:
+                    self.last_sync = datetime.now()
+                    self._update_sync_lbl()
+                    self.stat_page.update_sync_date()
+                    self.toast.show_msg("Data promo berhasil diperbarui!", self.t)
+                    self._data_cache = {"data": None, "timestamp": 0, "ttl_ms": 2000}
+                    self._reload_products()
+                else:
+                    self.toast.show_msg("Gagal memperbarui data. Periksa koneksi internet.", self.t)
+
+            QTimer.singleShot(0, update_ui)
+
+        QTimer.singleShot(0, do_sync)
+
+    def _update_sync_lbl(self):
+        pass
+
+    def _toggle_dark(self):
+        self.is_dark = not self.is_dark
+        self.t = DARK if self.is_dark else LIGHT
+        self.dark_btn.setText("☀︎" if self.is_dark else "⏾")
+        self._apply_theme()
+
+    def _toggle_budget_visibility(self):
+        if hasattr(self, '_budget_hidden') and self._budget_hidden:
+            self.budget_val.setText(rp(max(0, 100000 - sum(ci["product"].get("effective_price", ci["product"].get("price", 0)) * ci["quantity"] for ci in self.cart_items))))
+            self._budget_hidden = False
+        else:
+            self.budget_val.setText("Rp ••••••")
+            self._budget_hidden = True
+
+    def change_global_font_size(self, fs):
+        sizes = {"Sangat Kecil": 10, "Kecil": 11, "Normal": 12, "Besar": 14, "Sangat Besar": 16}
+        size = sizes.get(fs, 12)
+
+        app = QApplication.instance()
+        if app:
+            font = app.font()
+            font.setPointSize(size)
+            app.setFont(font)
+
+        for w in QApplication.allWidgets():
+            if isinstance(w, QLabel) and len(w.text()) <= 2 and any(ord(c) > 1000 for c in w.text()):
+                continue
+            if isinstance(w, QPushButton) and len(w.text()) <= 2 and any(ord(c) > 1000 for c in w.text()):
+                continue
+
+            try:
+                f = w.font()
+                f.setPointSize(size)
+                w.setFont(f)
+
+                if w.objectName() == "product_name":
+                    fm = QFontMetrics(f)
+                    w.setFixedHeight(fm.height() * 2 + 4)
+            except:
+                pass
+
+    def set_admin_login_callback(self, callback):
+        self._admin_login_callback = callback
+
+    # ── SYNC ─────────────────────────────────────────────────────────────────
+
+    # ── THEME ─────────────────────────────────────────────────────────────────
+
+    def _apply_theme(self):
+        t = self.t
+        self.centralWidget().setStyleSheet(f"background:{t['bg']};")
+        self.navbar.setStyleSheet(f"QFrame#navbar{{background:{t['nav_bg']};}}")
+        self.nav_line.setStyleSheet(f"background:{t['nav_border']};")
+
+        nb = f"QPushButton{{background:{t['btn_bg']};color:{t['btn_fg']};border:none;border-radius:16px;}}QPushButton:hover{{background:{t['cart_item_bg']};}}"
+        self.dark_btn.setStyleSheet(nb)
+        self.cart_btn.setStyleSheet(nb)
+        self.budget_capsule.setStyleSheet(f"background:{t['budget_bg']};border:1px solid #D1D5DB;border-radius:21px;padding:0 16px;")
+        self.budget_val.setStyleSheet(f"color:{t['price_fg']};background:transparent;")
+        self.budget_line.setStyleSheet(f"background:{t['price_fg']};border:none;border-radius:2px;")
+        
+        self.search.setStyleSheet(f"QLineEdit{{background:{t['search_bg']};color:{t['search_fg']};border:1px solid {t['search_border']};border-radius:21px;padding:0 18px;}}QLineEdit:focus{{border:2px solid #6F84B8;}}")
+        
+        self.filter_frame.setStyleSheet(f"QFrame#filterBar{{background:{t['filter_bg']};}}")
+        self.filter_line.setStyleSheet(f"background:{t['filter_border']};")
+        
+        self.prod_list.setStyleSheet(f"background:{t['bg']};border:none;")
+        
+        self._load_more_btn.setStyleSheet(f"QPushButton{{background:{t['price_fg']};color:white;border:none;border-radius:12px;padding:12px 24px;font-size:13px;font-weight:bold;}}QPushButton:hover{{background:{t['banner_from']};}}")
+
+        self.bottom_nav.setStyleSheet(f"QFrame#bottomNav{{background:{t['bottom_bg']};border-top:1px solid {t['bottom_border']};}}")
+        
+        self.banner.apply_theme(t)
+        for btn in self.cat_btns.values():
+            btn.apply_theme(t)
+            
+        self._style_bottom_btns(self.stack.currentIndex())
+        self.lokasi_page.apply_theme(t)
+        self.stat_page.apply_theme(t)
+        self.setting_page.apply_theme(t)
+        if hasattr(self, '_cart_page') and self._cart_page is not None:
+            self._cart_page.apply_theme(t)
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        if hasattr(self, "toast") and self.toast.isVisible():
+            pw = self.centralWidget().width()
+            self.toast.move(pw - self.toast.width() - 24, 76)
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    app.setStyle("Fusion")
+    app.setApplicationName("Radar Promo")
+    app.setFont(QFont("Arial", 10))
+    win = MainWindow()
+    win.show()
+    sys.exit(app.exec())

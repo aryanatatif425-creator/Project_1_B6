@@ -26,7 +26,7 @@ except ImportError as e:
 log = logging.getLogger(__name__)
 
 # ─── Konstanta ────────────────────────────────────────────────────
-ADMIN_PASSWORD = "adminpolban"
+ADMIN_PASSWORD = os.environ.get("RADAR_ADMIN_PASSWORD", "")
 
 # ─── Data awal ────────────────────────────────────────────────────
 def load_initial_data():
@@ -64,19 +64,44 @@ def open_admin_dashboard(parent):
     import sys
     import os
     try:
-        # Menjalankan sebagai proses terpisah agar Tkinter tidak bentrok dengan PyQt6
-        script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "admin_tool.py")
-        subprocess.Popen([sys.executable, script_path])
+        if getattr(sys, 'frozen', False):
+            base_path = os.path.dirname(sys.executable)
+        else:
+            base_path = os.path.dirname(os.path.abspath(__file__))
+        script_path = os.path.join(base_path, "admin_tool.py")
+        for python_cmd in [sys.executable, "python", "python3", "py"]:
+            try:
+                subprocess.Popen([python_cmd, script_path])
+                break
+            except FileNotFoundError:
+                continue
     except Exception as e:
         QMessageBox.information(parent, "Error", f"Gagal membuka Admin Tool: {e}")
 
 # ─── Entry Point ──────────────────────────────────────────────────
 def main():
+    from PyQt6.QtGui import QPalette, QColor, QIcon
+
     app = QApplication(sys.argv)
-    
+    app.setWindowIcon(QIcon(os.path.join(os.path.dirname(os.path.abspath(__file__)), "gemini-svg.ico")))
+
+    # Load Google Sans font into Qt font database
+    from PyQt6.QtGui import QFontDatabase
+    font_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "Fonts")
+    for fname in [
+        "GoogleSans-Regular.ttf",
+        "GoogleSans-Medium.ttf",
+        "GoogleSans-Bold.ttf",
+        "GoogleSans-Italic.ttf",
+        "GoogleSans-BoldItalic.ttf",
+        "GoogleSans-MediumItalic.ttf",
+    ]:
+        fpath = os.path.join(font_dir, fname)
+        if os.path.exists(fpath):
+            QFontDatabase.addApplicationFont(fpath)
+
     # Terapkan gaya dan palet global agar konsisten (mencegah teks putih di tema gelap)
     app.setStyle("Fusion")
-    from PyQt6.QtGui import QPalette, QColor
     pal = QPalette()
     pal.setColor(QPalette.ColorRole.Window,          QColor("#FFFFFF"))
     pal.setColor(QPalette.ColorRole.WindowText,      QColor("#191919"))

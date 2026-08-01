@@ -1,0 +1,22 @@
+__pycache__/
+*.pyc
+build/
+dist/
+*.zip
+activity.log
+*.log
+data_promo.json
+rekomendasi.json
+cart.json
+test_scrape_output.json
+lbl.txt
+_backup/
+.omo/
+.sisyphus/
+opencode/
+.DS_Store
+.env
+Dokumen PBL/Foto/
+Dokumen PBL/Issue Absensi*.csv
+Fonts/
+*.spec.bak

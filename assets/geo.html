@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+</head>
+<body>
+<p id="status" style="font-family:sans-serif;font-size:14px;color:#666;">Mendeteksi lokasi...</p>
+<script src="qwebchannel.js"></script>
+<script>
+(function() {
+    function doGeo() {
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                function(pos) {
+                    if (window.pyBridge && window.pyBridge.receiveUserLocation) {
+                        window.pyBridge.receiveUserLocation(pos.coords.latitude, pos.coords.longitude);
+                    } else {
+                        console.error('[GeoPage] pyBridge not available for receiveUserLocation');
+                    }
+                },
+                function(err) {
+                    if (window.pyBridge && window.pyBridge.receiveLocationError) {
+                        window.pyBridge.receiveLocationError(err.message || 'geo_error');
+                    } else {
+                        console.error('[GeoPage] pyBridge not available for receiveLocationError');
+                    }
+                },
+                {enableHighAccuracy:false, timeout:10000, maximumAge:300000}
+            );
+        } else {
+            if (window.pyBridge && window.pyBridge.receiveLocationError) {
+                window.pyBridge.receiveLocationError('Geolocation not supported');
+            }
+        }
+    }
+
+    var tries = 0;
+    var poll = setInterval(function() {
+        tries++;
+        if (window.pyBridge && window.pyBridge.receiveUserLocation) {
+            clearInterval(poll);
+            console.log('[GeoPage] pyBridge found via poll');
+            doGeo();
+        } else if (tries > 50) {
+            clearInterval(poll);
+            console.error('[GeoPage] pyBridge timeout');
+        }
+    }, 100);
+})();
+</script>
+</body>
+</html>

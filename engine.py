@@ -1,20 +1,11 @@
 """
 engine.py — Radar Promo Algorithm Engine
 =========================================
-Implements the core data-processing pipeline:
-  1. Filter: Area, Kategori, Toko, Jenis Harga
-  2. Smart Search: Teks cepat (search_vector)
-  3. Optimised Sort: Timsort bawaan Python
-  4. Statistik: Top 3 Cabang, Komposisi Kategori
-  5. Perubahan Harga: Kalkulasi selisih harga & persentase diskon
-  6. Validasi: Memastikan kelayakan data (ID, Harga, Nama)
+Mesin logika: filter, search, sort, statistik, validasi.
 """
 
-import logging
-from typing import Optional, Tuple
-from collections import Counter  # Modul bawaan Python untuk menghitung jumlah data dengan cepat
-
-log = logging.getLogger(__name__)
+from collections import Counter
+from typing import Optional, List, Dict, Tuple
 
 
 # ─── 1. FILTER ───────────────────────────────────────────────────
@@ -30,7 +21,9 @@ def filter_by_category(records: List[Dict], category: Optional[str]) -> List[Dic
     if not category or category.strip().lower() in ("", "semua kategori"):
         return records
     cat_norm = category.strip()
-    return [r for r in records if r.get("kategori") == cat_norm]
+    result = [r for r in records if r.get("category", "").strip() == cat_norm]
+    print(f"DEBUG filter_by_category: category='{cat_norm}', records_count={len(records)}, filtered_count={len(result)}")
+    return result
 
 
 def filter_by_brand(records: List[Dict], brand: Optional[str]) -> List[Dict]:
@@ -40,11 +33,84 @@ def filter_by_brand(records: List[Dict], brand: Optional[str]) -> List[Dict]:
     return [r for r in records if r.get("brand_toko", "").lower() == brand_norm]
 
 
+def filter_by_brand_multi(records: List[Dict], brands: List[str]) -> List[Dict]:
+    if not brands:
+        return records
+    return [r for r in records if r.get("brand_toko", "") in brands]
+
+
 def filter_by_jenis_harga(records: List[Dict], jenis: Optional[str]) -> List[Dict]:
     if not jenis or jenis.strip().lower() in ("", "semua jenis"):
         return records
     jenis_norm = jenis.strip()
     return [r for r in records if r.get("jenis_harga") == jenis_norm]
+
+
+def normalize_promo_data(records: List[Dict]) -> List[Dict]:
+    count = 0
+    promo_count = 0
+    for r in records:
+        diskon = r.get("diskon_persen", 0)
+        needs_recalc = False
+        
+        if isinstance(diskon, str):
+            if diskon.strip():
+                try:
+                    diskon = float(diskon)
+                except:
+                    needs_recalc = True
+            else:
+                needs_recalc = True
+        elif diskon is None or diskon <= 0:
+            needs_recalc = True
+        
+        if needs_recalc:
+            harga_normal = r.get("harga_normal", 0) or 0
+            harga_promo = r.get("harga_promo", 0) or 0
+            if harga_normal > 0 and harga_promo > 0 and harga_normal > harga_promo:
+                diskon = round(100 * (harga_normal - harga_promo) / harga_normal, 1)
+                r["diskon_persen"] = diskon
+                r["jenis_harga"] = "PROMO"
+                count += 1
+                promo_count += 1
+            else:
+                r["diskon_persen"] = 0
+                r["jenis_harga"] = "REGULER"
+    
+    print(f"[NORMALIZE] {count} products recalculated, {promo_count} confirmed as PROMO")
+    return records
+
+
+def filter_promo_items(records: List[Dict]) -> List[Dict]:
+    """Filter to only promotional items with actual discount."""
+    passed = 0
+    total = len(records)
+    result = []
+    for r in records:
+        diskon = r.get("diskon_persen", 0)
+        jenis = r.get("jenis_harga", "")
+        
+        if isinstance(diskon, str):
+            if diskon.strip():
+                try:
+                    diskon = float(diskon)
+                except:
+                    diskon = 0.0
+            else:
+                diskon = 0.0
+        
+        if diskon <= 0:
+            harga_normal = r.get("harga_normal", 0) or 0
+            harga_promo = r.get("harga_promo", 0) or 0
+            if harga_normal > 0 and harga_promo > 0 and harga_normal > harga_promo:
+                diskon = round(100 * (harga_normal - harga_promo) / harga_normal, 1)
+        
+        if diskon > 0 or jenis == "PROMO":
+            passed += 1
+            result.append(r)
+    
+    print(f"[FILTER] {passed}/{total} products pass promo filter")
+    return result
 
 
 # ─── 2. SEARCH ──────────────────────────────────────────────────
@@ -126,7 +192,7 @@ def run_pipeline(
     brand: Optional[str] = None,
     jenis_harga: Optional[str] = None,
     keyword: Optional[str] = None,
-    reverse: bool = False,
+    reverse: Optional[bool] = False,
 ) -> Tuple[List[Dict], Dict]:
     if not records:
         return [], {"top_3_toko": [], "komposisi_kategori": {}}
@@ -138,7 +204,17 @@ def run_pipeline(
     step5 = search_by_keyword(step4, keyword)
     step6 = validate_data(step5)
     step7 = apply_price_changes(step6)
-    step8 = sort_by_price(step7, reverse=reverse)
+    step8 = sort_by_price(step7, reverse=reverse) if reverse is not None else step7
     stats = get_statistics(step8)
 
     return step8, stats
+
+
+def normalize_product_name(name: str) -> str:
+    import re
+    name = name.strip().lower()
+    for filler in ["none ", "original ", "new "]:
+        if name.startswith(filler):
+            name = name[len(filler):]
+    name = re.sub(r'\b(\w+)( \1)+\b', r'\1', name, flags=re.IGNORECASE)
+    return " ".join(name.split())

@@ -42,7 +42,10 @@ def jalankan_sinkronisasi(progress_bar, log_widget, root):
 
         # Tahap 2: Jalankan scraper
         data_mentah, errors = scraper.run_scraper()
-        
+        log_widget.insert(tk.END, tulis_log(f"[DEBUG] run_scraper returned: {len(data_mentah)} items, {len(errors)} errors"))
+        log_widget.see(tk.END)
+        root.update_idletasks()
+
         if errors:
             for err in errors:
                 log_widget.insert(tk.END, tulis_log(f"[SCRAPING] ⚠️ {err}"))
@@ -69,7 +72,26 @@ def jalankan_sinkronisasi(progress_bar, log_widget, root):
         import data_manager
         if data_mentah:
             data_mentah = data_manager.enrich_data(data_mentah)
+        log_widget.insert(tk.END, tulis_log(f"[DEBUG] After enrichment: {len(data_mentah)} items"))
+        log_widget.see(tk.END)
+        root.update_idletasks()
         data_manager.write_local_data(data_mentah)
+        log_widget.insert(tk.END, tulis_log(f"[DEBUG] write_local_data returned OK"))
+        log_widget.see(tk.END)
+        root.update_idletasks()
+        progress_bar["value"] = 80
+        root.update_idletasks()
+
+        if data_mentah:
+            log_widget.insert(tk.END, tulis_log("[UPLOAD] Mengunggah data segar ke cloud..."))
+            log_widget.see(tk.END)
+            push_ok = data_manager.push_promo_to_cloud(data_mentah)
+            if push_ok:
+                log_widget.insert(tk.END, tulis_log("[UPLOAD] ✅ Cloud data updated (stale Borma data replaced)"))
+            else:
+                log_widget.insert(tk.END, tulis_log("[UPLOAD] ⚠️ Gagal upload ke cloud. Coba lagi nanti."))
+            log_widget.see(tk.END)
+
         progress_bar["value"] = 100
         root.update_idletasks()
 
@@ -243,7 +265,7 @@ def buat_window(parent=None):
 
     tk.Label(
         upload_frame,
-        text="Kirim data yang sudah di-sinkronisasi ke Google Sheets (database ).",
+        text="Kirim data yang sudah di-sinkronisasi ke Google Sheets (database pusat).",
         font=("Arial", 10),
         bg="#ffffff",
         fg="#6b7280"

@@ -15,6 +15,8 @@ folium>=4.0.0                  # Peta interaktif untuk LokasiPage (QWebEngineVie
 # --- Jaringan & Data ---
 requests>=2.31.0              # HTTP request ke Google Sheets API & ImgBB
 beautifulsoup4>=4.12.0        # Web scraping (dipakai oleh scraper.py)
+# Baca kredensial dari file .env lokal
+python-dotenv>=1.0.0
 
 # --- Packaging ---
 pyinstaller>=6.0.0

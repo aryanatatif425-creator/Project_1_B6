@@ -15,6 +15,13 @@ from datetime import datetime
 
 import copy
 
+# ─── Environment (.env) ─────────────────────────────────────────
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+except ImportError:
+    pass  # python-dotenv belum terpasang; fallback ke environment OS
+
 # ═══════════════ KONFIGURASI ═══════════════
 ADDRESS_BOOK = {
     "Alfamart": {

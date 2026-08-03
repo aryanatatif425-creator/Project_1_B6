@@ -10,6 +10,13 @@ import os
 import logging
 from PyQt6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QMessageBox, QInputDialog, QLineEdit
 
+# ─── Environment (.env) ─────────────────────────────────────────
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+except ImportError:
+    pass  # python-dotenv belum terpasang; fallback ke environment OS
+
 # ─── Import modul tim ─────────────────────────────────────────────
 try:
     import gui_pyqt          # GUI utama (milik Shahnaz / kamu)

@@ -36,6 +36,13 @@ from PyQt6.QtSvg import QSvgRenderer
 from PyQt6.QtSvgWidgets import QSvgWidget
 from PyQt6.QtWebChannel import QWebChannel
 
+# ─── Environment (.env) ─────────────────────────────────────────
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+except ImportError:
+    pass  # python-dotenv belum terpasang; fallback ke environment OS
+
 import data_manager
 import engine
 
